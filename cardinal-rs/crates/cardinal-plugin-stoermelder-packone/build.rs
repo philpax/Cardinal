@@ -73,7 +73,7 @@ fn main() {
 
     // Source files
 
-    // Glob stoermelder-packone/src/**/*.cpp|cc|c (recursive)
+    // Recursively collect source files
     fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
         if depth > 5 || !dir.exists() { return; }
         if let Ok(entries) = std::fs::read_dir(dir) {

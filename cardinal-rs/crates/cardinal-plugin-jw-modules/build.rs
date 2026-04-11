@@ -71,7 +71,7 @@ fn main() {
 
     // Source files
 
-    // Glob JW-Modules/lib/oscpack/ip/**/*.cpp|cc|c (recursive)
+    // Recursively collect source files
     fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
         if depth > 5 || !dir.exists() { return; }
         if let Ok(entries) = std::fs::read_dir(dir) {
@@ -89,81 +89,9 @@ fn main() {
         }
     }
     collect_sources(&plugins_dir.join("JW-Modules/lib/oscpack/ip"), &filter_out, &plugins_dir, &mut build, 0);
-
-    // Glob JW-Modules/lib/oscpack/ip/posix/**/*.cpp|cc|c (recursive)
-    fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
-        if depth > 5 || !dir.exists() { return; }
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
-                } else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {
-                    let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
-                    if !filter_out.contains(&rel) {
-                        build.file(&path);
-                    }
-                }
-            }
-        }
-    }
     collect_sources(&plugins_dir.join("JW-Modules/lib/oscpack/ip/posix"), &filter_out, &plugins_dir, &mut build, 0);
-
-    // Glob JW-Modules/lib/oscpack/ip/win32/**/*.cpp|cc|c (recursive)
-    fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
-        if depth > 5 || !dir.exists() { return; }
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
-                } else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {
-                    let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
-                    if !filter_out.contains(&rel) {
-                        build.file(&path);
-                    }
-                }
-            }
-        }
-    }
     collect_sources(&plugins_dir.join("JW-Modules/lib/oscpack/ip/win32"), &filter_out, &plugins_dir, &mut build, 0);
-
-    // Glob JW-Modules/lib/oscpack/osc/**/*.cpp|cc|c (recursive)
-    fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
-        if depth > 5 || !dir.exists() { return; }
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
-                } else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {
-                    let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
-                    if !filter_out.contains(&rel) {
-                        build.file(&path);
-                    }
-                }
-            }
-        }
-    }
     collect_sources(&plugins_dir.join("JW-Modules/lib/oscpack/osc"), &filter_out, &plugins_dir, &mut build, 0);
-
-    // Glob JW-Modules/src/**/*.cpp|cc|c (recursive)
-    fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
-        if depth > 5 || !dir.exists() { return; }
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
-                } else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {
-                    let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
-                    if !filter_out.contains(&rel) {
-                        build.file(&path);
-                    }
-                }
-            }
-        }
-    }
     collect_sources(&plugins_dir.join("JW-Modules/src"), &filter_out, &plugins_dir, &mut build, 0);
     build.file(plugins_dir.join("JW-Modules/src/Str1ker.cpp"));
 
