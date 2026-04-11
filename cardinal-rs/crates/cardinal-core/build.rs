@@ -1,7 +1,8 @@
 use std::path::PathBuf;
+use std::process::Command;
 
 fn main() {
-    // cardinal-rs/crates/cardinal-core -> cardinal-rs -> Cardinal
+    // cardinal-rs/crates/cardinal-core -> crates -> cardinal-rs -> Cardinal
     let cardinal_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()  // crates/
         .unwrap()
@@ -15,6 +16,24 @@ fn main() {
     let rack_src = rack_dir.join("src");
     let rack_include = rack_dir.join("include");
     let rack_dep = rack_dir.join("dep");
+
+    // ── Ensure submodules are initialized ────────────────────────────
+    if !rack_include.join("engine/Engine.hpp").exists() {
+        eprintln!("VCV Rack submodule not initialized. Running: git submodule update --init --recursive src/Rack");
+        let status = Command::new("git")
+            .args(["submodule", "update", "--init", "--recursive", "src/Rack"])
+            .current_dir(&cardinal_root)
+            .status();
+        match status {
+            Ok(s) if s.success() => {}
+            Ok(s) => panic!("git submodule update failed with {s}"),
+            Err(e) => panic!("Failed to run git: {e}. Please run: git submodule update --init --recursive src/Rack"),
+        }
+        assert!(
+            rack_include.join("engine/Engine.hpp").exists(),
+            "Submodule init succeeded but src/Rack/include/engine/Engine.hpp still missing"
+        );
+    }
 
     // ── Collect Rack C++ source files ────────────────────────────────
     let skip_basenames: &[&str] = &[
@@ -31,7 +50,7 @@ fn main() {
         if path.extension().map_or(true, |e| e != "cpp") {
             continue;
         }
-        // Skip core/ subdirectory
+        // Skip core/ subdirectory (depends on audio/midi subsystems)
         if path.to_str().unwrap().contains("/core/") {
             continue;
         }
