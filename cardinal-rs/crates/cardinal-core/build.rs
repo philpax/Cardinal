@@ -152,6 +152,7 @@ fn build_all_plugins(cardinal_root: &PathBuf, includes: &[PathBuf]) {
         "StarlingVia",        // custom starling submodule
         "surgext",            // Surge synthesizer engine
         "voxglitch",          // custom vgLib
+        "BaconPlugs",         // sst/filters dependency
     ];
 
     // Compile plugins.cpp (the master registration file)
