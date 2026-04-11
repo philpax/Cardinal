@@ -21,9 +21,10 @@ pkgs.mkShell {
     libsamplerate
     speexdsp
 
-    # OpenGL + EGL (for offscreen rendering + egui glow backend)
+    # OpenGL + EGL + GLEW (for NanoVG rendering)
     libGL
     libGLU
+    glew
     libglvnd.dev  # provides EGL headers
 
     # X11 (for egui/winit x11 backend)
@@ -41,14 +42,16 @@ pkgs.mkShell {
     libxkbcommon
   ];
 
-  # Ensure the linker can find libraries
+  # Ensure the linker and runtime can find libraries
   LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
     pkgs.libGL
+    pkgs.glew
     pkgs.wayland
     pkgs.libxkbcommon
     pkgs.xorg.libX11
     pkgs.xorg.libXcursor
     pkgs.xorg.libXrandr
     pkgs.xorg.libXi
+    pkgs.alsa-lib
   ];
 }

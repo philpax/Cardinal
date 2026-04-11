@@ -106,9 +106,19 @@ fn build_gl_impls(includes: &[PathBuf]) {
     let mut build = cc::Build::new();
     build.cpp(true).std("c++17").warnings(false)
         .define("PRIVATE", "").define("ARCH_X64", None).define("ARCH_LIN", None);
-    // System GLEW before Cardinal's stub
-    build.include("/usr/include");
+
+    // Find system GLEW via pkg-config (works on NixOS and normal distros)
+    if let Ok(glew) = pkg_config::probe_library("glew") {
+        for path in &glew.include_paths {
+            build.include(path);
+        }
+    } else {
+        // Fallback: try /usr/include
+        build.include("/usr/include");
+    }
+
     for d in includes {
+        // Skip Cardinal's stub GL/glew.h — we need the real one
         if d.ends_with("include") && d.to_str().unwrap().contains("Cardinal/include") { continue; }
         build.include(d);
     }
