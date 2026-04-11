@@ -11,11 +11,23 @@ use std::sync::Once;
 static INIT: Once = Once::new();
 
 /// Initialise the Rack engine.  Safe to call multiple times (only first call takes effect).
-pub fn init(sample_rate: f32) {
+/// `resource_dir` should point to the Cardinal repository root.
+pub fn init(sample_rate: f32, resource_dir: &str) {
     INIT.call_once(|| {
-        let ret = unsafe { ffi::cardinal_init(sample_rate) };
+        let c_dir = CString::new(resource_dir).expect("invalid resource_dir");
+        let ret = unsafe { ffi::cardinal_init(sample_rate, c_dir.as_ptr()) };
         assert_eq!(ret, 0, "cardinal_init failed");
     });
+}
+
+/// Returns the Cardinal repository root, inferred from this crate's build location.
+pub fn default_resource_dir() -> String {
+    // CARGO_MANIFEST_DIR at build time points into cardinal-rs/crates/cardinal-core
+    // which is 3 levels below the Cardinal root
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let p = std::path::PathBuf::from(manifest_dir);
+    p.parent().unwrap().parent().unwrap().parent().unwrap()
+        .to_str().unwrap().to_string()
 }
 
 /// Shut down the engine (best-effort, usually called at process exit).
@@ -168,6 +180,24 @@ pub fn module_get_output_voltage(id: ModuleId, port_id: i32) -> f32 {
 
 pub fn module_get_input_voltage(id: ModuleId, port_id: i32) -> f32 {
     unsafe { ffi::cardinal_module_get_input_voltage(id.0, port_id) }
+}
+
+/// Render a module widget to RGBA pixels.
+/// Returns `Some((width, height, rgba_data))` on success.
+pub fn module_render(id: ModuleId, max_width: i32, max_height: i32) -> Option<(i32, i32, Vec<u8>)> {
+    let buf_size = (max_width * max_height * 4) as usize;
+    let mut pixels = vec![0u8; buf_size];
+    let mut w = 0i32;
+    let mut h = 0i32;
+    let ok = unsafe {
+        ffi::cardinal_module_render(id.0, pixels.as_mut_ptr(), max_width, max_height, &mut w, &mut h)
+    };
+    if ok != 0 && w > 0 && h > 0 {
+        pixels.truncate((w * h * 4) as usize);
+        Some((w, h, pixels))
+    } else {
+        None
+    }
 }
 
 /// Connect an output port to an input port.

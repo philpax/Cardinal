@@ -1,70 +1,142 @@
 /*
- * Stubs for Rack subsystems we don't use in headless engine mode.
+ * Stubs for Rack subsystems not needed in the bridge.
+ * This provides link-time symbols for code that references windowing,
+ * audio I/O, MIDI, etc.
  */
 
-// Window.hpp brings in GLFW/GL/NanoVG headers — include it first.
+// Include order matters: system.hpp and context.hpp must be visible
+// to Window.hpp and our function bodies.
+#include <system.hpp>
+#include <context.hpp>
 #include <window/Window.hpp>
 #include <nanosvg.h>
-#include <nanovg_gl_utils.h>
 
-// ── Window member function stubs ────────────────────────────────────
+// ── Window stubs ────────────────────────────────────────────────────
+// The real Window is complex (owns GL context, manages GLFW).
+// We provide a minimal implementation since our bridge manages
+// EGL + NanoVG directly.
+
 namespace rack {
 namespace window {
-    Window::~Window() {}
-    int Window::getMods() { return 0; }
-    void Window::cursorLock() {}
-    void Window::cursorUnlock() {}
-    bool Window::isCursorLocked() { return false; }
-    bool Window::isFullScreen() { return false; }
-    static int s_fbCount = 0;
-    int& Window::fbCount() { return s_fbCount; }
-    static bool s_fbDirty = true;
-    bool& Window::fbDirtyOnSubpixelChange() { return s_fbDirty; }
-    double Window::getFrameDurationRemaining() { return 0.0; }
-    std::shared_ptr<Font> Window::loadFont(const std::string&) { return nullptr; }
-    std::shared_ptr<Image> Window::loadImage(const std::string&) { return nullptr; }
-    void generateScreenshot() {}
-}
+
+struct Window::Internal {
+    std::map<std::string, std::shared_ptr<Font>> fontCache;
+    std::map<std::string, std::shared_ptr<Image>> imageCache;
+};
+
+Window::Window() {
+    internal = new Internal;
 }
 
-// ── Blendish helper ─────────────────────────────────────────────────
-extern "C" float bnd_clamp(float v, float mn, float mx) {
-    return (v > mx) ? mx : (v < mn) ? mn : v;
+Window::~Window() {
+    delete internal;
 }
+
+math::Vec Window::getSize() { return math::Vec(1920, 1080); }
+void Window::setSize(math::Vec) {}
+void Window::close() {}
+void Window::cursorLock() {}
+void Window::cursorUnlock() {}
+bool Window::isCursorLocked() { return false; }
+int Window::getMods() { return 0; }
+void Window::setFullScreen(bool) {}
+bool Window::isFullScreen() { return false; }
+double Window::getMonitorRefreshRate() { return 60.0; }
+double Window::getFrameTime() { return 0.0; }
+double Window::getLastFrameDuration() { return 1.0 / 60.0; }
+double Window::getFrameDurationRemaining() { return 1.0 / 60.0; }
+
+std::shared_ptr<Font> Window::loadFont(const std::string& filename) {
+    auto& cache = internal->fontCache;
+    auto it = cache.find(filename);
+    if (it != cache.end())
+        return it->second;
+
+    auto font = std::make_shared<Font>();
+    try {
+        font->loadFile(filename, vg);
+    } catch (...) {
+        fprintf(stderr, "cardinal: failed to load font %s\n", filename.c_str());
+        return nullptr;
+    }
+    cache[filename] = font;
+    return font;
+}
+
+std::shared_ptr<Image> Window::loadImage(const std::string& filename) {
+    auto& cache = internal->imageCache;
+    auto it = cache.find(filename);
+    if (it != cache.end())
+        return it->second;
+
+    auto image = std::make_shared<Image>();
+    try {
+        image->loadFile(filename, vg);
+    } catch (...) {
+        fprintf(stderr, "cardinal: failed to load image %s\n", filename.c_str());
+        return nullptr;
+    }
+    cache[filename] = image;
+    return image;
+}
+
+static bool s_fbDirty = true;
+bool& Window::fbDirtyOnSubpixelChange() { return s_fbDirty; }
+static int s_fbCount = 0;
+int& Window::fbCount() { return s_fbCount; }
+
+void generateScreenshot() {}
+
+// Font/Image (normally in Window.cpp)
+Font::~Font() {}
+void Font::loadFile(const std::string& filename, NVGcontext* vg) {
+    this->vg = vg;
+    std::string name = rack::system::getStem(filename);
+    size_t size;
+    uint8_t* data = rack::system::readFile(filename, &size);
+    if (!data) throw Exception("Failed to read font %s", filename.c_str());
+    handle = nvgCreateFontMem(vg, name.c_str(), data, size, 1);
+    if (handle < 0) throw Exception("Failed to load font %s", filename.c_str());
+}
+
+std::shared_ptr<Font> Font::load(const std::string& filename) {
+    return APP->window->loadFont(filename);
+}
+
+Image::~Image() {
+    if (handle >= 0 && vg)
+        nvgDeleteImage(vg, handle);
+}
+
+void Image::loadFile(const std::string& filename, NVGcontext* vg) {
+    this->vg = vg;
+    std::vector<uint8_t> data = rack::system::readFile(filename);
+    handle = nvgCreateImageMem(vg, NVG_IMAGE_REPEATX | NVG_IMAGE_REPEATY,
+                                data.data(), data.size());
+    if (handle <= 0) throw Exception("Failed to load image %s", filename.c_str());
+}
+
+std::shared_ptr<Image> Image::load(const std::string& filename) {
+    return APP->window->loadImage(filename);
+}
+
+// SVG loading provided by Rack/src/window/Svg.cpp (not stubbed)
+
+}  // namespace window
+}  // namespace rack
 
 // ── GLFW stubs ──────────────────────────────────────────────────────
 void glfwSetClipboardString(GLFWwindow*, const char*) {}
 const char* glfwGetClipboardString(GLFWwindow*) { return ""; }
 int glfwGetKeyScancode(int) { return 0; }
 const char* glfwGetKeyName(int, int) { return ""; }
+void glfwSetCursor(GLFWwindow*, GLFWcursor*) {}
+GLFWcursor* glfwCreateStandardCursor(int) { return nullptr; }
 
-// ── NanoVG GL utility stubs ─────────────────────────────────────────
-NVGLUframebuffer* nvgluCreateFramebuffer(NVGcontext*, int, int, int) { return nullptr; }
-void nvgluBindFramebuffer(NVGLUframebuffer*) {}
-void nvgluDeleteFramebuffer(NVGLUframebuffer*) {}
-
-// ── NanoSVG stubs ───────────────────────────────────────────────────
-extern "C" {
-    NSVGimage* nsvgParse(char*, const char*, float) { return nullptr; }
-    NSVGimage* nsvgParseFromFile(const char*, const char*, float) { return nullptr; }
-    void nsvgDelete(NSVGimage*) {}
+// ── Blendish helper ─────────────────────────────────────────────────
+extern "C" float bnd_clamp(float v, float mn, float mx) {
+    return (v > mx) ? mx : (v < mn) ? mn : v;
 }
-
-// ── osdialog stubs ──────────────────────────────────────────────────
-#include <osdialog.h>
-
-char* osdialog_file(osdialog_file_action action, const char* dir,
-                    const char* filename, osdialog_filters* filters) {
-    (void)action; (void)dir; (void)filename; (void)filters;
-    return nullptr;
-}
-int osdialog_message(osdialog_message_level level,
-                     osdialog_message_buttons buttons, const char* msg) {
-    (void)level; (void)buttons; (void)msg;
-    return 0;
-}
-osdialog_filters* osdialog_filters_parse(const char*) { return nullptr; }
-void osdialog_filters_free(osdialog_filters*) {}
 
 // ── Standard includes ───────────────────────────────────────────────
 #include <common.hpp>
@@ -74,6 +146,7 @@ void osdialog_filters_free(osdialog_filters*) {}
 #include <engine/Cable.hpp>
 #include <engine/Module.hpp>
 #include <context.hpp>
+#include <system.hpp>
 #include <midiloopback.hpp>
 
 #include <string>
@@ -105,35 +178,70 @@ namespace rack {
 }
 
 // ── Asset stubs ─────────────────────────────────────────────────────
+// Real implementations are in custom/asset.cpp equivalent in plugin_init.cpp
+// These are the base functions from rack's asset.hpp
 namespace rack {
 namespace asset {
-    std::string systemDir;
+    std::string configDir;
     std::string userDir;
+    std::string systemDir;
     std::string bundlePath;
 
+    std::string config(std::string filename) {
+        return rack::system::join(configDir, filename);
+    }
     std::string system(std::string filename) {
-        return systemDir + "/" + filename;
+        return rack::system::join(systemDir, bundlePath.empty() ? filename : filename);
     }
     std::string user(std::string filename) {
-        return userDir + "/" + filename;
+        return rack::system::join(userDir, filename);
     }
-    std::string plugin(rack::plugin::Plugin*, std::string filename) {
-        return filename;
+    std::string plugin(rack::plugin::Plugin* plugin, std::string filename) {
+        if (!plugin) return filename;
+        return rack::system::join(plugin->path, filename);
     }
 }
 }
 
-// ── Plugin registry stubs ───────────────────────────────────────────
+// ── osdialog stubs ──────────────────────────────────────────────────
+#include <osdialog.h>
+
+char* osdialog_file(osdialog_file_action, const char*, const char*, osdialog_filters*) {
+    return nullptr;
+}
+int osdialog_message(osdialog_message_level, osdialog_message_buttons, const char*) {
+    return 0;
+}
+osdialog_filters* osdialog_filters_parse(const char*) { return nullptr; }
+void osdialog_filters_free(osdialog_filters*) {}
+
+// ── Plugin registry ─────────────────────────────────────────────────
 namespace rack {
 namespace plugin {
     std::string pluginsPath;
     std::vector<Plugin*> plugins;
 
-    Plugin* getPlugin(const std::string&) { return nullptr; }
-    Plugin* getPluginFallback(const std::string&) { return nullptr; }
-    Model* getModel(const std::string&, const std::string&) { return nullptr; }
-    Model* getModelFallback(const std::string&, const std::string&) { return nullptr; }
-    Model* modelFromJson(json_t*) { return nullptr; }
+    Plugin* getPlugin(const std::string& slug) {
+        for (auto* p : plugins)
+            if (p->slug == slug) return p;
+        return nullptr;
+    }
+    Plugin* getPluginFallback(const std::string& slug) {
+        return getPlugin(slug);
+    }
+    Model* getModel(const std::string& pluginSlug, const std::string& modelSlug) {
+        if (auto* p = getPlugin(pluginSlug))
+            return p->getModel(modelSlug);
+        return nullptr;
+    }
+    Model* getModelFallback(const std::string& pluginSlug, const std::string& modelSlug) {
+        return getModel(pluginSlug, modelSlug);
+    }
+    Model* modelFromJson(json_t* moduleJ) {
+        std::string pluginSlug = json_string_value(json_object_get(moduleJ, "plugin"));
+        std::string modelSlug = json_string_value(json_object_get(moduleJ, "model"));
+        return getModel(pluginSlug, modelSlug);
+    }
     bool isSlugValid(const std::string&) { return true; }
     std::string normalizeSlug(const std::string& slug) { return slug; }
     void settingsMergeJson(json_t*) {}

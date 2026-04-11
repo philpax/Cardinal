@@ -2,7 +2,8 @@ use cardinal_core::{self as cc, CableId, ModuleId};
 use eframe::egui;
 
 fn main() -> eframe::Result {
-    cc::init(48000.0);
+    let resource_dir = cc::default_resource_dir();
+    cc::init(48000.0, &resource_dir);
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

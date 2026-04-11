@@ -59,7 +59,7 @@ impl Default for ModuleCatalogEntry {
 }
 
 unsafe extern "C" {
-    pub fn cardinal_init(sample_rate: f32) -> i32;
+    pub fn cardinal_init(sample_rate: f32, resource_dir: *const c_char) -> i32;
     pub fn cardinal_shutdown();
 
     pub fn cardinal_catalog_count() -> i32;
@@ -78,6 +78,12 @@ unsafe extern "C" {
 
     pub fn cardinal_cable_create(out_module: i64, out_port: i32, in_module: i64, in_port: i32) -> i64;
     pub fn cardinal_cable_destroy(h: i64);
+
+    pub fn cardinal_module_render(
+        h: i64,
+        pixels: *mut u8, max_width: i32, max_height: i32,
+        out_width: *mut i32, out_height: *mut i32,
+    ) -> i32;
 
     pub fn cardinal_process(frames: i32);
     pub fn cardinal_get_sample_rate() -> f32;

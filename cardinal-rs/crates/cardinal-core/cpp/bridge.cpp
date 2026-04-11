@@ -1,10 +1,9 @@
 /*
- * Cardinal Rust Bridge
+ * Cardinal Rust Bridge — real plugin loading + NanoVG rendering
  *
- * Thin C API over the VCV Rack engine, compiled from the real Rack source.
- * Provides module creation, cable patching, engine stepping, and
- * metadata queries — everything needed for an external UI to drive
- * the engine.
+ * Creates an offscreen EGL/GL context, initialises the Rack engine and
+ * NanoVG, loads real VCV Rack plugins (starting with Fundamental), and
+ * can render any ModuleWidget to an RGBA pixel buffer.
  */
 
 #include "bridge.h"
@@ -12,41 +11,176 @@
 #include <engine/Engine.hpp>
 #include <engine/Module.hpp>
 #include <engine/Cable.hpp>
+#include <app/ModuleWidget.hpp>
+#include <app/CableWidget.hpp>
+#include <app/RackWidget.hpp>
+#include <app/SvgPanel.hpp>
+#include <widget/FramebufferWidget.hpp>
 #include <context.hpp>
 #include <settings.hpp>
 #include <plugin.hpp>
 #include <random.hpp>
 #include <logger.hpp>
+#include <asset.hpp>
+#include <system.hpp>
+#include <window/Window.hpp>
 
 #include <cstring>
 #include <unordered_map>
 
-// Forward declaration from test_modules.cpp
-namespace test_modules { void registerTestModules(); }
+#include <EGL/egl.h>
+#include <GL/gl.h>
 
-// ── Internal state ─────────────────────────────────���─────────────────
+// Forward declarations for plugin init
+namespace rack { namespace plugin { void initStaticPlugins(); } }
+
+// ── Internal state ───────────────────────────────────────────────────
 
 static rack::Context* g_context = nullptr;
 static rack::engine::Engine* g_engine = nullptr;
 
-// Map module handles to Module pointers (handle = module->id)
-static std::unordered_map<int64_t, rack::engine::Module*> g_modules;
-// Map cable handles to Cable pointers (handle = cable->id)
+// EGL state
+static EGLDisplay g_eglDisplay = EGL_NO_DISPLAY;
+static EGLContext g_eglContext = EGL_NO_CONTEXT;
+static EGLSurface g_eglSurface = EGL_NO_SURFACE;
+
+// NanoVG context
+static NVGcontext* g_vg = nullptr;
+static NVGcontext* g_fbVg = nullptr;
+
+// Module tracking
+struct ModuleEntry {
+    rack::engine::Module* module = nullptr;
+    rack::app::ModuleWidget* widget = nullptr;
+    rack::plugin::Model* model = nullptr;
+};
+static std::unordered_map<int64_t, ModuleEntry> g_modules;
 static std::unordered_map<int64_t, rack::engine::Cable*> g_cables;
-// Map module handles to their Model (for metadata queries)
-static std::unordered_map<int64_t, rack::plugin::Model*> g_module_models;
+
+// ── EGL offscreen context ────────────────────────────────────────────
+
+static bool initEGL() {
+    g_eglDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if (g_eglDisplay == EGL_NO_DISPLAY) {
+        fprintf(stderr, "cardinal: eglGetDisplay failed\n");
+        return false;
+    }
+
+    EGLint major, minor;
+    if (!eglInitialize(g_eglDisplay, &major, &minor)) {
+        fprintf(stderr, "cardinal: eglInitialize failed\n");
+        return false;
+    }
+
+    // Request OpenGL (not OpenGL ES)
+    eglBindAPI(EGL_OPENGL_API);
+
+    EGLint configAttribs[] = {
+        EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, 8,
+        EGL_STENCIL_SIZE, 8,
+        EGL_NONE
+    };
+
+    EGLConfig config;
+    EGLint numConfigs;
+    if (!eglChooseConfig(g_eglDisplay, configAttribs, &config, 1, &numConfigs) || numConfigs == 0) {
+        fprintf(stderr, "cardinal: eglChooseConfig failed\n");
+        return false;
+    }
+
+    // Create a small pbuffer surface (NanoVG FBO rendering doesn't need a real surface)
+    EGLint pbufferAttribs[] = {
+        EGL_WIDTH, 16,
+        EGL_HEIGHT, 16,
+        EGL_NONE
+    };
+    g_eglSurface = eglCreatePbufferSurface(g_eglDisplay, config, pbufferAttribs);
+
+    EGLint contextAttribs[] = {
+        EGL_CONTEXT_MAJOR_VERSION, 2,
+        EGL_CONTEXT_MINOR_VERSION, 0,
+        EGL_NONE
+    };
+    g_eglContext = eglCreateContext(g_eglDisplay, config, EGL_NO_CONTEXT, contextAttribs);
+    if (g_eglContext == EGL_NO_CONTEXT) {
+        fprintf(stderr, "cardinal: eglCreateContext failed\n");
+        return false;
+    }
+
+    eglMakeCurrent(g_eglDisplay, g_eglSurface, g_eglSurface, g_eglContext);
+    return true;
+}
+
+static void shutdownEGL() {
+    if (g_eglDisplay != EGL_NO_DISPLAY) {
+        eglMakeCurrent(g_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        if (g_eglContext != EGL_NO_CONTEXT)
+            eglDestroyContext(g_eglDisplay, g_eglContext);
+        if (g_eglSurface != EGL_NO_SURFACE)
+            eglDestroySurface(g_eglDisplay, g_eglSurface);
+        eglTerminate(g_eglDisplay);
+    }
+    g_eglDisplay = EGL_NO_DISPLAY;
+    g_eglContext = EGL_NO_CONTEXT;
+    g_eglSurface = EGL_NO_SURFACE;
+}
+
+// ── NanoVG init ──────────────────────────────────────────────────────
+
+// NanoVG GL2 functions (implementation in nanovg_gl_impl.c)
+#define NANOVG_GL2
+#include <nanovg_gl.h>
+
+static bool initNanoVG() {
+    g_vg = nvgCreateGL2(NVG_ANTIALIAS | NVG_STENCIL_STROKES);
+    if (!g_vg) {
+        fprintf(stderr, "cardinal: nvgCreateGL2 failed\n");
+        return false;
+    }
+    g_fbVg = nvgCreateGL2(NVG_ANTIALIAS | NVG_STENCIL_STROKES);
+    if (!g_fbVg) {
+        fprintf(stderr, "cardinal: nvgCreateGL2 (fb) failed\n");
+        return false;
+    }
+    return true;
+}
 
 // ── Lifecycle ────────────────────────────────────────────────────────
 
-int cardinal_init(float sample_rate) {
-    // Initialise Rack logger (writes to stderr)
+int cardinal_init(float sample_rate, const char* resource_dir) {
     rack::logger::init();
-
-    // Initialise random seed
     rack::random::init();
 
-    // Configure settings for headless
-    rack::settings::headless = true;
+    // Set up asset paths
+    std::string root(resource_dir);
+    rack::asset::systemDir = root + "/src/Rack/res";
+    rack::asset::userDir = root + "/user_data";
+    rack::asset::bundlePath = "";  // Empty = local source build mode
+
+    // Create user_data dir if missing
+    rack::system::createDirectories(rack::asset::userDir);
+
+    rack::settings::headless = false;  // We want rendering
+    rack::settings::devMode = true;
+
+    // Init EGL
+    if (!initEGL()) {
+        fprintf(stderr, "cardinal: EGL init failed, falling back to headless\n");
+        rack::settings::headless = true;
+    }
+
+    // Init NanoVG (only if we have GL)
+    if (!rack::settings::headless) {
+        if (!initNanoVG()) {
+            fprintf(stderr, "cardinal: NanoVG init failed, falling back to headless\n");
+            rack::settings::headless = true;
+        }
+    }
 
     // Create context
     g_context = new rack::Context();
@@ -55,36 +189,53 @@ int cardinal_init(float sample_rate) {
     // Create engine
     g_engine = new rack::engine::Engine();
     g_context->engine = g_engine;
-
-    // Set sample rate
     g_engine->setSampleRate(sample_rate);
 
-    // Register built-in test modules
-    test_modules::registerTestModules();
+    // Set up Window with our NanoVG context
+    // The Window object normally owns the GL context; we give it ours.
+    if (!rack::settings::headless) {
+        // We'll set the vg pointers directly — the Window stubs
+        // won't create their own context.
+        // Note: this relies on our custom Window initialization in stubs.cpp
+    }
+
+    // Init plugins
+    rack::plugin::initStaticPlugins();
+
+    fprintf(stderr, "cardinal: initialized with %d plugins, %d total models\n",
+            (int)rack::plugin::plugins.size(),
+            cardinal_catalog_count());
 
     return 0;
 }
 
 void cardinal_shutdown(void) {
+    // Clean up modules
+    for (auto& [id, entry] : g_modules) {
+        if (entry.widget) {
+            delete entry.widget;
+        }
+        if (entry.module) {
+            g_engine->removeModule(entry.module);
+            delete entry.module;
+        }
+    }
     g_modules.clear();
     g_cables.clear();
-    g_module_models.clear();
+
+    if (g_fbVg) { nvgDeleteGL2(g_fbVg); g_fbVg = nullptr; }
+    if (g_vg) { nvgDeleteGL2(g_vg); g_vg = nullptr; }
 
     if (g_engine) {
-        g_engine->clear();
-    }
-
-    if (g_context) {
-        // Engine is deleted by Context destructor indirectly, but we
-        // manage it ourselves, so detach first.
         g_context->engine = nullptr;
         delete g_engine;
         g_engine = nullptr;
-
-        delete g_context;
-        g_context = nullptr;
     }
 
+    delete g_context;
+    g_context = nullptr;
+
+    shutdownEGL();
     rack::logger::destroy();
 }
 
@@ -92,12 +243,8 @@ void cardinal_shutdown(void) {
 
 int cardinal_catalog_count(void) {
     int count = 0;
-    for (auto* plugin : rack::plugin::plugins) {
-        for (auto* model : plugin->models) {
-            (void)model;
-            count++;
-        }
-    }
+    for (auto* plugin : rack::plugin::plugins)
+        count += plugin->models.size();
     return count;
 }
 
@@ -115,38 +262,46 @@ int cardinal_catalog_list(ModuleCatalogEntry* out, int max_entries) {
     return i;
 }
 
-// ── Module management ────────────────────────────────��───────────────
+// ── Module management ────────────────────────────────────────────────
+
+static rack::plugin::Model* findModel(const char* plugin_slug, const char* model_slug) {
+    for (auto* plugin : rack::plugin::plugins) {
+        if (plugin->slug != plugin_slug) continue;
+        for (auto* m : plugin->models) {
+            if (m->slug == model_slug)
+                return m;
+        }
+        break;
+    }
+    return nullptr;
+}
 
 ModuleHandle cardinal_module_create(const char* plugin_slug, const char* model_slug) {
     if (!g_engine) return -1;
 
-    // Find model
-    rack::plugin::Model* model = nullptr;
-    for (auto* plugin : rack::plugin::plugins) {
-        if (plugin->slug != plugin_slug) continue;
-        for (auto* m : plugin->models) {
-            if (m->slug == model_slug) {
-                model = m;
-                break;
-            }
-        }
-        if (model) break;
-    }
+    rack::plugin::Model* model = findModel(plugin_slug, model_slug);
     if (!model) return -1;
 
-    // Create module instance
+    // Create the engine-side module
     rack::engine::Module* module = model->createModule();
     if (!module) return -1;
 
-    module->model = model;
-
-    // Add to engine (assigns module->id)
+    // Add to engine
     g_engine->addModule(module);
-
     int64_t handle = module->id;
-    g_modules[handle] = module;
-    g_module_models[handle] = model;
 
+    // Create the widget (for rendering)
+    rack::app::ModuleWidget* widget = nullptr;
+    if (!rack::settings::headless) {
+        try {
+            widget = model->createModuleWidget(module);
+        } catch (...) {
+            fprintf(stderr, "cardinal: failed to create widget for %s/%s\n",
+                    plugin_slug, model_slug);
+        }
+    }
+
+    g_modules[handle] = { module, widget, model };
     return handle;
 }
 
@@ -154,50 +309,56 @@ void cardinal_module_destroy(ModuleHandle h) {
     auto it = g_modules.find(h);
     if (it == g_modules.end()) return;
 
-    rack::engine::Module* module = it->second;
-    g_engine->removeModule(module);
-    delete module;
+    if (it->second.widget)
+        delete it->second.widget;
+
+    g_engine->removeModule(it->second.module);
+    delete it->second.module;
 
     g_modules.erase(it);
-    g_module_models.erase(h);
 }
 
 void cardinal_module_get_size(ModuleHandle h, float* width, float* height) {
     auto it = g_modules.find(h);
-    if (it == g_modules.end()) {
-        *width = 0; *height = 0;
-        return;
+    if (it == g_modules.end()) { *width = 0; *height = 0; return; }
+
+    if (it->second.widget) {
+        *width = it->second.widget->box.size.x;
+        *height = it->second.widget->box.size.y;
+    } else {
+        // Fallback for headless
+        auto* mod = it->second.module;
+        int numPorts = std::max(mod->getNumInputs(), mod->getNumOutputs());
+        int hp = std::max(3, std::min(25, numPorts * 3 + 2));
+        *width = hp * 15.f;
+        *height = 380.f;
     }
-
-    rack::engine::Module* mod = it->second;
-    // Estimate width based on max(inputs, outputs, params) in HP units
-    // Standard Rack module: 1 HP = 15 px, height = 380 px
-    int numPorts = std::max(mod->getNumInputs(), mod->getNumOutputs());
-    int hp = std::max(3, std::min(25, numPorts * 3 + 2));
-    // Adjust for params
-    int paramRows = (int(mod->getNumParams()) + 1) / 2;
-    hp = std::max(hp, std::min(25, paramRows * 3 + 2));
-
-    *width = hp * 15.f;
-    *height = 380.f;
 }
 
 int cardinal_module_get_inputs(ModuleHandle h, PortInfo* out, int max) {
     auto it = g_modules.find(h);
     if (it == g_modules.end()) return 0;
 
-    rack::engine::Module* mod = it->second;
+    auto* mod = it->second.module;
+    auto* widget = it->second.widget;
     int count = std::min(max, (int)mod->getNumInputs());
-
-    float moduleWidth = 0, moduleHeight = 0;
-    cardinal_module_get_size(h, &moduleWidth, &moduleHeight);
 
     for (int i = 0; i < count; i++) {
         auto* info = mod->getInputInfo(i);
         out[i].port_id = i;
         out[i].name = info ? info->name.c_str() : "";
-        // Layout: inputs on left side, evenly spaced vertically
-        out[i].x = 15.f;  // ~1 HP from left
+
+        // Get port position from widget if available
+        if (widget) {
+            auto* pw = widget->getInput(i);
+            if (pw) {
+                out[i].x = pw->box.getCenter().x;
+                out[i].y = pw->box.getCenter().y;
+                continue;
+            }
+        }
+        // Fallback layout
+        out[i].x = 15.f;
         out[i].y = 80.f + i * 40.f;
     }
     return count;
@@ -207,17 +368,25 @@ int cardinal_module_get_outputs(ModuleHandle h, PortInfo* out, int max) {
     auto it = g_modules.find(h);
     if (it == g_modules.end()) return 0;
 
-    rack::engine::Module* mod = it->second;
+    auto* mod = it->second.module;
+    auto* widget = it->second.widget;
     int count = std::min(max, (int)mod->getNumOutputs());
-
-    float moduleWidth = 0, moduleHeight = 0;
-    cardinal_module_get_size(h, &moduleWidth, &moduleHeight);
 
     for (int i = 0; i < count; i++) {
         auto* info = mod->getOutputInfo(i);
         out[i].port_id = i;
         out[i].name = info ? info->name.c_str() : "";
-        // Layout: outputs on right side
+
+        if (widget) {
+            auto* pw = widget->getOutput(i);
+            if (pw) {
+                out[i].x = pw->box.getCenter().x;
+                out[i].y = pw->box.getCenter().y;
+                continue;
+            }
+        }
+        float moduleWidth = 0, moduleHeight = 0;
+        cardinal_module_get_size(h, &moduleWidth, &moduleHeight);
         out[i].x = moduleWidth - 15.f;
         out[i].y = 80.f + i * 40.f;
     }
@@ -228,12 +397,12 @@ int cardinal_module_get_params(ModuleHandle h, ParamInfo* out, int max) {
     auto it = g_modules.find(h);
     if (it == g_modules.end()) return 0;
 
-    rack::engine::Module* mod = it->second;
+    auto* mod = it->second.module;
+    auto* widget = it->second.widget;
     int count = std::min(max, (int)mod->getNumParams());
 
-    float moduleWidth = 0, moduleHeight = 0;
-    cardinal_module_get_size(h, &moduleWidth, &moduleHeight);
-    float centerX = moduleWidth / 2.f;
+    float mw = 0, mh = 0;
+    cardinal_module_get_size(h, &mw, &mh);
 
     for (int i = 0; i < count; i++) {
         auto* pq = mod->getParamQuantity(i);
@@ -243,14 +412,17 @@ int cardinal_module_get_params(ModuleHandle h, ParamInfo* out, int max) {
         out[i].max_value = pq ? pq->getMaxValue() : 1.f;
         out[i].default_value = pq ? pq->getDefaultValue() : 0.f;
         out[i].value = pq ? pq->getValue() : 0.f;
-        // Layout: params in center, in two columns if width allows
-        int col = i % 2;
-        int row = i / 2;
-        if (moduleWidth > 60.f) {
-            out[i].x = centerX + (col == 0 ? -18.f : 18.f);
-        } else {
-            out[i].x = centerX;
+
+        if (widget) {
+            auto* pw = widget->getParam(i);
+            if (pw) {
+                out[i].x = pw->box.getCenter().x;
+                out[i].y = pw->box.getCenter().y;
+                continue;
+            }
         }
+        int col = i % 2, row = i / 2;
+        out[i].x = mw / 2.f + (col == 0 ? -18.f : 18.f);
         out[i].y = 50.f + row * 45.f;
     }
     return count;
@@ -259,27 +431,92 @@ int cardinal_module_get_params(ModuleHandle h, ParamInfo* out, int max) {
 float cardinal_module_get_param(ModuleHandle h, int param_id) {
     auto it = g_modules.find(h);
     if (it == g_modules.end()) return 0.f;
-    return g_engine->getParamValue(it->second, param_id);
+    return g_engine->getParamValue(it->second.module, param_id);
 }
 
 void cardinal_module_set_param(ModuleHandle h, int param_id, float value) {
     auto it = g_modules.find(h);
     if (it == g_modules.end()) return;
-    g_engine->setParamValue(it->second, param_id, value);
+    g_engine->setParamValue(it->second.module, param_id, value);
 }
 
 float cardinal_module_get_input_voltage(ModuleHandle h, int port_id) {
     auto it = g_modules.find(h);
     if (it == g_modules.end()) return 0.f;
-    if (port_id < 0 || port_id >= (int)it->second->getNumInputs()) return 0.f;
-    return it->second->getInput(port_id).getVoltage();
+    if (port_id < 0 || port_id >= (int)it->second.module->getNumInputs()) return 0.f;
+    return it->second.module->getInput(port_id).getVoltage();
 }
 
 float cardinal_module_get_output_voltage(ModuleHandle h, int port_id) {
     auto it = g_modules.find(h);
     if (it == g_modules.end()) return 0.f;
-    if (port_id < 0 || port_id >= (int)it->second->getNumOutputs()) return 0.f;
-    return it->second->getOutput(port_id).getVoltage();
+    if (port_id < 0 || port_id >= (int)it->second.module->getNumOutputs()) return 0.f;
+    return it->second.module->getOutput(port_id).getVoltage();
+}
+
+// ── Rendering ────────────────────────────────────────────────────────
+
+int cardinal_module_render(ModuleHandle h,
+                           unsigned char* pixels, int max_width, int max_height,
+                           int* out_width, int* out_height)
+{
+    auto it = g_modules.find(h);
+    if (it == g_modules.end() || !it->second.widget || !g_vg)
+        return 0;
+
+    auto* widget = it->second.widget;
+    int w = (int)widget->box.size.x;
+    int h2 = (int)widget->box.size.y;
+
+    if (w <= 0 || h2 <= 0 || w > max_width || h2 > max_height)
+        return 0;
+
+    *out_width = w;
+    *out_height = h2;
+
+    // Create FBO
+    NVGLUframebuffer* fbo = nvgluCreateFramebuffer(g_vg, w, h2, 0);
+    if (!fbo) return 0;
+
+    nvgluBindFramebuffer(fbo);
+    glViewport(0, 0, w, h2);
+    glClearColor(0, 0, 0, 0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+    // Begin NanoVG frame
+    nvgBeginFrame(g_vg, w, h2, 1.0f);
+
+    // Draw the module widget
+    rack::widget::Widget::DrawArgs args;
+    args.vg = g_vg;
+    args.clipBox = rack::math::Rect(rack::math::Vec(0, 0),
+                                     rack::math::Vec(w, h2));
+    args.fb = nullptr;
+
+    widget->draw(args);
+    // Also draw layer 1 (lights/halos)
+    widget->drawLayer(args, 1);
+
+    nvgEndFrame(g_vg);
+
+    // Read pixels back
+    glReadPixels(0, 0, w, h2, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+    nvgluBindFramebuffer(nullptr);
+    nvgluDeleteFramebuffer(fbo);
+
+    // OpenGL returns pixels bottom-up; flip vertically
+    int stride = w * 4;
+    std::vector<unsigned char> row(stride);
+    for (int y = 0; y < h2 / 2; y++) {
+        unsigned char* top = pixels + y * stride;
+        unsigned char* bot = pixels + (h2 - 1 - y) * stride;
+        memcpy(row.data(), top, stride);
+        memcpy(top, bot, stride);
+        memcpy(bot, row.data(), stride);
+    }
+
+    return 1;
 }
 
 // ── Cable management ─────────────────────────────────────────────────
@@ -294,10 +531,10 @@ CableHandle cardinal_cable_create(
     auto in_it = g_modules.find(in_module);
     if (out_it == g_modules.end() || in_it == g_modules.end()) return -1;
 
-    rack::engine::Cable* cable = new rack::engine::Cable();
-    cable->outputModule = out_it->second;
+    auto* cable = new rack::engine::Cable();
+    cable->outputModule = out_it->second.module;
     cable->outputId = out_port;
-    cable->inputModule = in_it->second;
+    cable->inputModule = in_it->second.module;
     cable->inputId = in_port;
 
     try {
@@ -316,10 +553,8 @@ void cardinal_cable_destroy(CableHandle h) {
     auto it = g_cables.find(h);
     if (it == g_cables.end()) return;
 
-    rack::engine::Cable* cable = it->second;
-    g_engine->removeCable(cable);
-    delete cable;
-
+    g_engine->removeCable(it->second);
+    delete it->second;
     g_cables.erase(it);
 }
 

@@ -21,9 +21,10 @@ pkgs.mkShell {
     libsamplerate
     speexdsp
 
-    # OpenGL (for Rack widget stubs + egui glow backend)
+    # OpenGL + EGL (for offscreen rendering + egui glow backend)
     libGL
     libGLU
+    libglvnd.dev  # provides EGL headers
 
     # X11 (for egui/winit x11 backend)
     xorg.libX11
