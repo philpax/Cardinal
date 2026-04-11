@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__RebelTech");
+    build.define("init", "init__RebelTech");
     build.define("BefacoInputPort", "RebelTechBefacoInputPort");
     build.define("modelBefacoInputPort", "modelRebelTechBefacoInputPort");
     build.define("BefacoInputPortWidget", "RebelTechBefacoInputPortWidget");

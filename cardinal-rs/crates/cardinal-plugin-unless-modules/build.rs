@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__unless_modules");
+    build.define("init", "init__unless_modules");
     build.define("Selection", "unless_modulesSelection");
     build.define("modelSelection", "modelunless_modulesSelection");
     build.define("SelectionWidget", "unless_modulesSelectionWidget");

@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__HamptonHarmonics");
+    build.define("init", "init__HamptonHarmonics");
     build.define("Arp", "HamptonHarmonicsArp");
     build.define("modelArp", "modelHamptonHarmonicsArp");
     build.define("ArpWidget", "HamptonHarmonicsArpWidget");

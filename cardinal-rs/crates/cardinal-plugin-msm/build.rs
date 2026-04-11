@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__MSM");
+    build.define("init", "init__MSM");
     build.define("ADSR", "MSMADSR");
     build.define("modelADSR", "modelMSMADSR");
     build.define("ADSRWidget", "MSMADSRWidget");

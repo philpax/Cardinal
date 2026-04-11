@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__ArableInstruments");
+    build.define("init", "init__ArableInstruments");
 
     // Filter-out list
     let filter_out: Vec<String> = vec![

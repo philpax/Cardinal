@@ -8,3 +8,4 @@ cc = "1"
 pkg-config = "0.3"
 
 [dependencies]
+cardinal-plugins-registry = { path = "../cardinal-plugins-registry" }

@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__MockbaModular");
+    build.define("init", "init__MockbaModular");
     build.define("Blank", "MockbaModularBlank");
     build.define("modelBlank", "modelMockbaModularBlank");
     build.define("BlankWidget", "MockbaModularBlankWidget");

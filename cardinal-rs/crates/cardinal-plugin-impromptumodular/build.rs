@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__ImpromptuModular");
+    build.define("init", "init__ImpromptuModular");
     build.define("RefreshCounter", "ImpromptuModularRefreshCounter");
     build.define("modelRefreshCounter", "modelImpromptuModularRefreshCounter");
     build.define("RefreshCounterWidget", "ImpromptuModularRefreshCounterWidget");

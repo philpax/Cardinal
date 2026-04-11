@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__PdArray");
+    build.define("init", "init__PdArray");
     build.define("drwav", "PdArraydrwav");
     build.define("modeldrwav", "modelPdArraydrwav");
     build.define("drwavWidget", "PdArraydrwavWidget");

@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__AmalgamatedHarmonics");
+    build.define("init", "init__AmalgamatedHarmonics");
     build.define("BasePinkNoiseGenerator", "AmalgamatedHarmonicsBasePinkNoiseGenerator");
     build.define("modelBasePinkNoiseGenerator", "modelAmalgamatedHarmonicsBasePinkNoiseGenerator");
     build.define("BasePinkNoiseGeneratorWidget", "AmalgamatedHarmonicsBasePinkNoiseGeneratorWidget");

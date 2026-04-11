@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__LifeFormModular");
+    build.define("init", "init__LifeFormModular");
     build.define("IO", "LifeFormModularIO");
     build.define("modelIO", "modelLifeFormModularIO");
     build.define("IOWidget", "LifeFormModularIOWidget");

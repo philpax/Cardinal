@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__EnigmaCurry");
+    build.define("init", "init__EnigmaCurry");
     build.define("Pulse", "EnigmaCurryPulse");
     build.define("modelPulse", "modelEnigmaCurryPulse");
     build.define("PulseWidget", "EnigmaCurryPulseWidget");

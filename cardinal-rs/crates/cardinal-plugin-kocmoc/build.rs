@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__kocmoc");
+    build.define("init", "init__kocmoc");
     build.define("Diode", "kocmocDiode");
     build.define("modelDiode", "modelkocmocDiode");
     build.define("DiodeWidget", "kocmocDiodeWidget");

@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__FehlerFabrik");
+    build.define("init", "init__FehlerFabrik");
     build.define("Operator", "FehlerFabrikOperator");
     build.define("modelOperator", "modelFehlerFabrikOperator");
     build.define("OperatorWidget", "FehlerFabrikOperatorWidget");

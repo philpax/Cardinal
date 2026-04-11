@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__Befaco");
+    build.define("init", "init__Befaco");
     build.define("ADSR", "BefacoADSR");
     build.define("modelADSR", "modelBefacoADSR");
     build.define("ADSRWidget", "BefacoADSRWidget");

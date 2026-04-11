@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__CatroModulo");
+    build.define("init", "init__CatroModulo");
     build.define("LowFrequencyOscillator", "CatroModuloLowFrequencyOscillator");
     build.define("modelLowFrequencyOscillator", "modelCatroModuloLowFrequencyOscillator");
     build.define("LowFrequencyOscillatorWidget", "CatroModuloLowFrequencyOscillatorWidget");

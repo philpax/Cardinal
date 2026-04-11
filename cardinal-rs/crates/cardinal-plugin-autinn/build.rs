@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__Autinn");
+    build.define("init", "init__Autinn");
     build.define("Chord", "AutinnChord");
     build.define("modelChord", "modelAutinnChord");
     build.define("ChordWidget", "AutinnChordWidget");

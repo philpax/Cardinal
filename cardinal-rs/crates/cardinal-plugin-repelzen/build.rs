@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__repelzen");
+    build.define("init", "init__repelzen");
     build.define("Blank", "repelzenBlank");
     build.define("modelBlank", "modelrepelzenBlank");
     build.define("BlankWidget", "repelzenBlankWidget");

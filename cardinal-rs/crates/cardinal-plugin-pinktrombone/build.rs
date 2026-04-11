@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__PinkTrombone");
+    build.define("init", "init__PinkTrombone");
     build.define("WhiteNoise", "PinkTromboneWhiteNoise");
     build.define("modelWhiteNoise", "modelPinkTromboneWhiteNoise");
     build.define("WhiteNoiseWidget", "PinkTromboneWhiteNoiseWidget");

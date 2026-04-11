@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__eightfold");
+    build.define("init", "init__eightfold");
     build.define("Comparator", "eightfoldComparator");
     build.define("modelComparator", "modeleightfoldComparator");
     build.define("ComparatorWidget", "eightfoldComparatorWidget");

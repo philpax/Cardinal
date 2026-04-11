@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__ChowDSP");
+    build.define("init", "init__ChowDSP");
     build.define("sign", "ChowDSPsign");
     build.define("modelsign", "modelChowDSPsign");
     build.define("signWidget", "ChowDSPsignWidget");

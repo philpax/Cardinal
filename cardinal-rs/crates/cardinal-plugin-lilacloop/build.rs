@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__LilacLoop");
+    build.define("init", "init__LilacLoop");
     build.define("AudioFile", "LilacLoopAudioFile");
     build.define("modelAudioFile", "modelLilacLoopAudioFile");
     build.define("AudioFileWidget", "LilacLoopAudioFileWidget");

@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__ValleyAudio");
+    build.define("init", "init__ValleyAudio");
     build.define("drwav", "ValleyAudiodrwav");
     build.define("modeldrwav", "modelValleyAudiodrwav");
     build.define("drwavWidget", "ValleyAudiodrwavWidget");

@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__WSTD_Drums");
+    build.define("init", "init__WSTD_Drums");
     build.define("ADSR", "WSTD-DrumsADSR");
     build.define("modelADSR", "modelWSTD-DrumsADSR");
     build.define("ADSRWidget", "WSTD-DrumsADSRWidget");

@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__Computerscare");
+    build.define("init", "init__Computerscare");
     build.define("Quantizer", "ComputerscareQuantizer");
     build.define("modelQuantizer", "modelComputerscareQuantizer");
     build.define("QuantizerWidget", "ComputerscareQuantizerWidget");

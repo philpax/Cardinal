@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__GrandeModular");
+    build.define("init", "init__GrandeModular");
 
     // Filter-out list
     let filter_out: Vec<String> = vec![

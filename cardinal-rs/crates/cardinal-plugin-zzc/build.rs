@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__ZZC");
+    build.define("init", "init__ZZC");
     build.define("Clock", "ZZCClock");
     build.define("modelClock", "modelZZCClock");
     build.define("ClockWidget", "ZZCClockWidget");

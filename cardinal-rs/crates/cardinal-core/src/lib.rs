@@ -3,6 +3,9 @@
 //! Compiles the real VCV Rack C++ engine code and exposes it through
 //! a safe Rust API for module creation, cable patching, and audio processing.
 
+// Ensure plugin crates are linked (they provide the compiled plugin objects)
+extern crate cardinal_plugins_registry;
+
 mod ffi;
 
 use std::ffi::CString;

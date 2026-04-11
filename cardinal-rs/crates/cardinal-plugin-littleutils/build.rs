@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__LittleUtils");
+    build.define("init", "init__LittleUtils");
     build.define("MsDisplayWidget", "LittleUtilsMsDisplayWidget");
     build.define("modelMsDisplayWidget", "modelLittleUtilsMsDisplayWidget");
     build.define("MsDisplayWidgetWidget", "LittleUtilsMsDisplayWidgetWidget");

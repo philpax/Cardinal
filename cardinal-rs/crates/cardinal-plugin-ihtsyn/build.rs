@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__ihtsyn");
+    build.define("init", "init__ihtsyn");
 
     // Filter-out list
     let filter_out: Vec<String> = vec![

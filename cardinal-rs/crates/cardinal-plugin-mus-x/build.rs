@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__MUS_X");
+    build.define("init", "init__MUS_X");
 
     // Filter-out list
     let filter_out: Vec<String> = vec![

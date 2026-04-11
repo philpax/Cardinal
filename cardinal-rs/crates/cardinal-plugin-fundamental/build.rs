@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__Fundamental");
+    build.define("init", "init__Fundamental");
     build.define("drwav", "Fundamentaldrwav");
     build.define("modeldrwav", "modelFundamentaldrwav");
     build.define("drwavWidget", "FundamentaldrwavWidget");

@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__dBiz");
+    build.define("init", "init__dBiz");
     build.define("Chord", "dBizChord");
     build.define("modelChord", "modeldBizChord");
     build.define("ChordWidget", "dBizChordWidget");

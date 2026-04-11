@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__AaronStatic");
+    build.define("init", "init__AaronStatic");
     build.define("RefreshCounter", "AaronStaticRefreshCounter");
     build.define("modelRefreshCounter", "modelAaronStaticRefreshCounter");
     build.define("RefreshCounterWidget", "AaronStaticRefreshCounterWidget");

@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__PathSet");
+    build.define("init", "init__PathSet");
     build.define("PitchShifter", "PathSetPitchShifter");
     build.define("modelPitchShifter", "modelPathSetPitchShifter");
     build.define("PitchShifterWidget", "PathSetPitchShifterWidget");

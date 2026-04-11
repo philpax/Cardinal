@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__Biset");
+    build.define("init", "init__Biset");
     build.define("Blank", "BisetBlank");
     build.define("modelBlank", "modelBisetBlank");
     build.define("BlankWidget", "BisetBlankWidget");

@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__AS");
+    build.define("init", "init__AS");
     build.define("ADSR", "ASADSR");
     build.define("modelADSR", "modelASADSR");
     build.define("ADSRWidget", "ASADSRWidget");

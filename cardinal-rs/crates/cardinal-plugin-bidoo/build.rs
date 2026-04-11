@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__Bidoo");
+    build.define("init", "init__Bidoo");
     build.define("ChannelDisplay", "BidooChannelDisplay");
     build.define("modelChannelDisplay", "modelBidooChannelDisplay");
     build.define("ChannelDisplayWidget", "BidooChannelDisplayWidget");

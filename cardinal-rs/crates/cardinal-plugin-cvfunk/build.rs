@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__CVfunk");
+    build.define("init", "init__CVfunk");
     build.define("Steps", "CVfunkSteps");
     build.define("modelSteps", "modelCVfunkSteps");
     build.define("StepsWidget", "CVfunkStepsWidget");

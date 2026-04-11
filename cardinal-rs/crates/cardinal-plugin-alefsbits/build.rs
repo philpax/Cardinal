@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__alefsbits");
+    build.define("init", "init__alefsbits");
     build.define("Steps", "alefsbitsSteps");
     build.define("modelSteps", "modelalefsbitsSteps");
     build.define("StepsWidget", "alefsbitsStepsWidget");

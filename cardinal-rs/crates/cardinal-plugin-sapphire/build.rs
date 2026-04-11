@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__sapphire");
+    build.define("init", "init__sapphire");
 
     // Filter-out list
     let filter_out: Vec<String> = vec![

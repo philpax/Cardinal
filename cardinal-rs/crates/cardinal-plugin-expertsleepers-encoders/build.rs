@@ -61,6 +61,7 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__ExpertSleepersEncoders");
+    build.define("init", "init__ExpertSleepersEncoders");
 
     // Filter-out list
     let filter_out: Vec<String> = vec![
