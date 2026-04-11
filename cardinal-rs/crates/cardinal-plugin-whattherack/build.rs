@@ -65,7 +65,7 @@ fn main() {
 
     // Filter-out list
     let _filter_out: Vec<String> = vec![
-        "WhatTheRack/src/WhatTheRack.cpp".to_string(),
+
     ];
 
     // Source files

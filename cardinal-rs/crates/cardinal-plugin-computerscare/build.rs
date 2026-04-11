@@ -71,7 +71,6 @@ fn main() {
 
     // Filter-out list
     let _filter_out: Vec<String> = vec![
-        "Computerscare/src/Computerscare.cpp".to_string(),
         "Computerscare/src/test.cpp".to_string(),
     ];
 

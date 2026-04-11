@@ -65,7 +65,7 @@ fn main() {
 
     // Filter-out list
     let _filter_out: Vec<String> = vec![
-        "h4n4-modules/src/plugin.cpp".to_string(),
+
     ];
 
     // Source files

@@ -298,6 +298,7 @@ dependencies = [
 name = "cardinal-core"
 version = "0.1.0"
 dependencies = [
+ "cardinal-plugins-registry",
  "cc",
  "pkg-config",
 ]
@@ -327,13 +328,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cardinal-plugin-alefsbits"
-version = "0.1.0"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "cardinal-plugin-algoritmarte"
 version = "0.1.0"
 dependencies = [
@@ -349,13 +343,6 @@ dependencies = [
 
 [[package]]
 name = "cardinal-plugin-animatedcircuits"
-version = "0.1.0"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "cardinal-plugin-arableinstruments"
 version = "0.1.0"
 dependencies = [
  "cc",
@@ -418,13 +405,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cardinal-plugin-bogaudiomodules-helper"
-version = "0.1.0"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "cardinal-plugin-catromodulo"
 version = "0.1.0"
 dependencies = [
@@ -461,13 +441,6 @@ dependencies = [
 
 [[package]]
 name = "cardinal-plugin-dbiz"
-version = "0.1.0"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "cardinal-plugin-dhe-modules"
 version = "0.1.0"
 dependencies = [
  "cc",
@@ -803,21 +776,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cardinal-plugin-surgext-helper"
-version = "0.1.0"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "cardinal-plugin-unless-modules"
-version = "0.1.0"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "cardinal-plugin-valleyaudio"
 version = "0.1.0"
 dependencies = [
  "cc",
@@ -864,11 +823,9 @@ version = "0.1.0"
 dependencies = [
  "cardinal-plugin-aaronstatic",
  "cardinal-plugin-admiral",
- "cardinal-plugin-alefsbits",
  "cardinal-plugin-algoritmarte",
  "cardinal-plugin-amalgamatedharmonics",
  "cardinal-plugin-animatedcircuits",
- "cardinal-plugin-arableinstruments",
  "cardinal-plugin-as",
  "cardinal-plugin-autinn",
  "cardinal-plugin-axioma",
@@ -877,14 +834,12 @@ dependencies = [
  "cardinal-plugin-bidoodark",
  "cardinal-plugin-biset",
  "cardinal-plugin-bogaudiomodules",
- "cardinal-plugin-bogaudiomodules-helper",
  "cardinal-plugin-catromodulo",
  "cardinal-plugin-cf",
  "cardinal-plugin-chowdsp",
  "cardinal-plugin-computerscare",
  "cardinal-plugin-cvfunk",
  "cardinal-plugin-dbiz",
- "cardinal-plugin-dhe-modules",
  "cardinal-plugin-eightfold",
  "cardinal-plugin-enigmacurry",
  "cardinal-plugin-eseries",
@@ -932,9 +887,7 @@ dependencies = [
  "cardinal-plugin-sonusmodular",
  "cardinal-plugin-stocaudio",
  "cardinal-plugin-stoermelder-packone",
- "cardinal-plugin-surgext-helper",
  "cardinal-plugin-unless-modules",
- "cardinal-plugin-valleyaudio",
  "cardinal-plugin-venom",
  "cardinal-plugin-whattherack",
  "cardinal-plugin-wstd-drums",

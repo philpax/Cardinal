@@ -216,6 +216,10 @@ osdialog_filters* osdialog_filters_parse(const char*) { return nullptr; }
 void osdialog_filters_free(osdialog_filters*) {}
 
 // ── Plugin registry ─────────────────────────────────────────────────
+// hostTerminalModels — used by Engine to identify terminal modules.
+// Populated by bridge.cpp when creating the AudioIO module.
+std::vector<rack::plugin::Model*> hostTerminalModels;
+
 namespace rack {
 namespace plugin {
     std::string pluginsPath;

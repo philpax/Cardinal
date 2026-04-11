@@ -83,7 +83,6 @@ fn main() {
 
     // Filter-out list
     let _filter_out: Vec<String> = vec![
-        "ZZC/src/ZZC.cpp".to_string(),
         "ZZC/src/WavetablePlayer.cpp".to_string(),
     ];
 

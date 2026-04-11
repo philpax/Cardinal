@@ -71,7 +71,7 @@ fn main() {
 
     // Filter-out list
     let _filter_out: Vec<String> = vec![
-        "CatroModulo/src/CatroModulo.cpp".to_string(),
+
     ];
 
     // Source files

@@ -101,7 +101,7 @@ fn main() {
 
     // Filter-out list
     let _filter_out: Vec<String> = vec![
-        "MSM/src/MSM.cpp".to_string(),
+
     ];
 
     // Source files

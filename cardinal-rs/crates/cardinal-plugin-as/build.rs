@@ -101,7 +101,7 @@ fn main() {
 
     // Filter-out list
     let _filter_out: Vec<String> = vec![
-        "AS/src/AS.cpp".to_string(),
+
     ];
 
     // Source files

@@ -71,8 +71,6 @@ fn main() {
 
     // Filter-out list
     let _filter_out: Vec<String> = vec![
-        "MockbaModular/src/plugin.cpp".to_string(),
-        "MockbaModular/src/MockbaModular.cpp".to_string(),
         "MockbaModular/src/UDPClockMaster.cpp".to_string(),
         "MockbaModular/src/UDPClockSlave.cpp".to_string(),
     ];

@@ -86,7 +86,6 @@ fn main() {
 
     // Filter-out list
     let _filter_out: Vec<String> = vec![
-        "Befaco/src/plugin.cpp".to_string(),
         "Befaco/src/MidiThing.cpp".to_string(),
     ];
 

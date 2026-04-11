@@ -71,7 +71,7 @@ fn main() {
 
     // Filter-out list
     let _filter_out: Vec<String> = vec![
-        "Prism/src/plugin.cpp".to_string(),
+
     ];
 
     // Source files

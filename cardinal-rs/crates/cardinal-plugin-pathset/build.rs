@@ -68,7 +68,7 @@ fn main() {
 
     // Filter-out list
     let _filter_out: Vec<String> = vec![
-        "PathSet/src/plugin.cpp".to_string(),
+
     ];
 
     // Source files

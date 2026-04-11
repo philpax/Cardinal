@@ -248,9 +248,16 @@ cc = "1"
     # Generate the defines for custom_module_names
     # custom_module_names = -D${1}=${2}${1} -Dmodel${1}=model${2}${1} -D${1}Widget=${2}${1}Widget
     defines_code = ""
+    # Plugins that explicitly need init renamed (from Makefile's -Dinit=)
+    INIT_RENAME_PLUGINS = {
+        "AaronStatic", "Autinn", "ImpromptuModular", "MindMeld",
+        "WSTD_Drums", "mscHack", "stoermelder_p1",
+    }
+
     if pi_rename:
         defines_code += f'    build.define("pluginInstance", "pluginInstance__{pi_rename}");\n'
-        defines_code += f'    build.define("init", "init__{pi_rename}");\n'
+        if pi_rename in INIT_RENAME_PLUGINS:
+            defines_code += f'    build.define("init", "init__{pi_rename}");\n'
 
     for sym in custom_renames:
         # Use pi_rename as prefix (matches the Makefile's convention)
@@ -302,7 +309,21 @@ cc = "1"
     for ef in explicit_files:
         source_code_parts.append(f'    build.file(plugins_dir.join("{ef}"));')
 
-    filter_out_code = "\n".join(f'        "{f}".to_string(),' for f in filter_out)
+    # Keep filter-outs for files with external deps, but DON'T filter out
+    # plugin.cpp/main-header files (they define pluginInstance and init).
+    # The Makefile filtered those for the monolithic plugins.cpp approach;
+    # in per-vendor crates we need them.
+    kept_filter_out = []
+    for f in filter_out:
+        basename = f.rsplit("/", 1)[-1] if "/" in f else f
+        # Keep the filter if it's NOT a plugin registration file
+        if basename not in ("plugin.cpp",) and not basename.endswith(".hpp"):
+            # Also check if it looks like the vendor's main header cpp
+            stem = basename.replace(".cpp", "")
+            vendor_lower = vendor.lower().replace("-", "").replace("_", "")
+            if stem.lower().replace("-", "").replace("_", "") != vendor_lower:
+                kept_filter_out.append(f)
+    filter_out_code = "\n".join(f'        "{f}".to_string(),' for f in kept_filter_out)
     # Use underscore prefix if filter_out is unused (no source dirs to glob)
     filter_out_var = "_filter_out" if not source_dirs else "filter_out"
 
@@ -429,16 +450,23 @@ cc = "1"
         if pi:
             init_calls.append((vendor, pi))
 
+    INIT_RENAME_PLUGINS = {
+        "AaronStatic", "Autinn", "ImpromptuModular", "MindMeld",
+        "WSTD_Drums", "mscHack", "stoermelder_p1",
+    }
+
     # Generate the extern declarations and init calls
     extern_decls = []
     init_stmts = []
     for vendor, pi_name in init_calls:
-        extern_decls.append(f'extern "C++" void init__{pi_name}(rack::plugin::Plugin*);')
+        # Use renamed init for plugins that need it, plain init for the rest
+        init_fn = f"init__{pi_name}" if pi_name in INIT_RENAME_PLUGINS else "init"
+        extern_decls.append(f'extern "C++" void {init_fn}(rack::plugin::Plugin*);')
         init_stmts.append(f"""    {{
         Plugin* const p = new Plugin;
         pluginInstance__{pi_name} = p;
         const StaticPluginLoader spl(p, "{vendor}");
-        if (spl.ok()) init__{pi_name}(p);
+        if (spl.ok()) {init_fn}(p);
     }}""")
 
     extern_pi_decls = "\n".join(

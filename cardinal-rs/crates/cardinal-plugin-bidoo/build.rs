@@ -683,7 +683,6 @@ fn main() {
 
     // Filter-out list
     let _filter_out: Vec<String> = vec![
-        "Bidoo/src/plugin.cpp".to_string(),
         "Bidoo/src/ANTN.cpp".to_string(),
         "Bidoo/src/dep/lodepng/pngdetail.cpp".to_string(),
         "Bidoo/src/dep/resampler/main.cpp".to_string(),

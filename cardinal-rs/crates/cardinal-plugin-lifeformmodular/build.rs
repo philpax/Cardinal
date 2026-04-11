@@ -77,7 +77,7 @@ fn main() {
 
     // Filter-out list
     let _filter_out: Vec<String> = vec![
-        "LifeFormModular/src/plugin.cpp".to_string(),
+
     ];
 
     // Source files

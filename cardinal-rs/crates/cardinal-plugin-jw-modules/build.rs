@@ -65,7 +65,6 @@ fn main() {
 
     // Filter-out list
     let _filter_out: Vec<String> = vec![
-        "JW-Modules/src/JWModules.cpp".to_string(),
         "JW-Modules/src/Str1ker.cpp".to_string(),
     ];
 

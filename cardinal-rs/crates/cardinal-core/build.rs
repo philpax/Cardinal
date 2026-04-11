@@ -88,7 +88,15 @@ fn build_rack_engine(rack_src: &PathBuf, includes: &[PathBuf]) {
         if skip.contains(&stem) { continue; }
         build.file(&path);
     }
+    // Use cargo_metadata=false to prevent cc from emitting its own
+    // cargo:rustc-link-lib directive. We emit it manually with +whole-archive.
+    build.cargo_metadata(false);
     build.compile("rack_engine");
+
+    // Emit whole-archive link so all Rack symbols are available to plugin crates
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    println!("cargo:rustc-link-search=native={out_dir}");
+    println!("cargo:rustc-link-lib=static:+whole-archive=rack_engine");
 }
 
 fn build_gl_impls(includes: &[PathBuf]) {
