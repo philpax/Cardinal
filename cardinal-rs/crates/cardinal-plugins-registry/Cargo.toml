@@ -1,0 +1,87 @@
+[package]
+name = "cardinal-plugins-registry"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cardinal-plugin-aaronstatic = { path = "../cardinal-plugin-aaronstatic" }
+cardinal-plugin-admiral = { path = "../cardinal-plugin-admiral" }
+cardinal-plugin-alefsbits = { path = "../cardinal-plugin-alefsbits" }
+cardinal-plugin-algoritmarte = { path = "../cardinal-plugin-algoritmarte" }
+cardinal-plugin-amalgamatedharmonics = { path = "../cardinal-plugin-amalgamatedharmonics" }
+cardinal-plugin-animatedcircuits = { path = "../cardinal-plugin-animatedcircuits" }
+cardinal-plugin-arableinstruments = { path = "../cardinal-plugin-arableinstruments" }
+cardinal-plugin-as = { path = "../cardinal-plugin-as" }
+cardinal-plugin-autinn = { path = "../cardinal-plugin-autinn" }
+cardinal-plugin-axioma = { path = "../cardinal-plugin-axioma" }
+cardinal-plugin-befaco = { path = "../cardinal-plugin-befaco" }
+cardinal-plugin-bidoo = { path = "../cardinal-plugin-bidoo" }
+cardinal-plugin-bidoodark = { path = "../cardinal-plugin-bidoodark" }
+cardinal-plugin-biset = { path = "../cardinal-plugin-biset" }
+cardinal-plugin-bogaudiomodules = { path = "../cardinal-plugin-bogaudiomodules" }
+cardinal-plugin-bogaudiomodules-helper = { path = "../cardinal-plugin-bogaudiomodules-helper" }
+cardinal-plugin-catromodulo = { path = "../cardinal-plugin-catromodulo" }
+cardinal-plugin-cf = { path = "../cardinal-plugin-cf" }
+cardinal-plugin-chowdsp = { path = "../cardinal-plugin-chowdsp" }
+cardinal-plugin-computerscare = { path = "../cardinal-plugin-computerscare" }
+cardinal-plugin-cvfunk = { path = "../cardinal-plugin-cvfunk" }
+cardinal-plugin-dbiz = { path = "../cardinal-plugin-dbiz" }
+cardinal-plugin-dhe-modules = { path = "../cardinal-plugin-dhe-modules" }
+cardinal-plugin-eightfold = { path = "../cardinal-plugin-eightfold" }
+cardinal-plugin-enigmacurry = { path = "../cardinal-plugin-enigmacurry" }
+cardinal-plugin-eseries = { path = "../cardinal-plugin-eseries" }
+cardinal-plugin-expertsleepers-encoders = { path = "../cardinal-plugin-expertsleepers-encoders" }
+cardinal-plugin-extratone = { path = "../cardinal-plugin-extratone" }
+cardinal-plugin-fehlerfabrik = { path = "../cardinal-plugin-fehlerfabrik" }
+cardinal-plugin-forsitan-modulare = { path = "../cardinal-plugin-forsitan-modulare" }
+cardinal-plugin-fundamental = { path = "../cardinal-plugin-fundamental" }
+cardinal-plugin-gluethegiant = { path = "../cardinal-plugin-gluethegiant" }
+cardinal-plugin-goodsheperd = { path = "../cardinal-plugin-goodsheperd" }
+cardinal-plugin-grandemodular = { path = "../cardinal-plugin-grandemodular" }
+cardinal-plugin-h4n4-modules = { path = "../cardinal-plugin-h4n4-modules" }
+cardinal-plugin-hamptonharmonics = { path = "../cardinal-plugin-hamptonharmonics" }
+cardinal-plugin-ihtsyn = { path = "../cardinal-plugin-ihtsyn" }
+cardinal-plugin-impromptumodular = { path = "../cardinal-plugin-impromptumodular" }
+cardinal-plugin-impromptumodulardark = { path = "../cardinal-plugin-impromptumodulardark" }
+cardinal-plugin-jw-modules = { path = "../cardinal-plugin-jw-modules" }
+cardinal-plugin-kocmoc = { path = "../cardinal-plugin-kocmoc" }
+cardinal-plugin-lifeformmodular = { path = "../cardinal-plugin-lifeformmodular" }
+cardinal-plugin-lilacloop = { path = "../cardinal-plugin-lilacloop" }
+cardinal-plugin-littleutils = { path = "../cardinal-plugin-littleutils" }
+cardinal-plugin-lomasmodules = { path = "../cardinal-plugin-lomasmodules" }
+cardinal-plugin-lyraemodules = { path = "../cardinal-plugin-lyraemodules" }
+cardinal-plugin-meander = { path = "../cardinal-plugin-meander" }
+cardinal-plugin-mindmeldmodular = { path = "../cardinal-plugin-mindmeldmodular" }
+cardinal-plugin-ml-modules = { path = "../cardinal-plugin-ml-modules" }
+cardinal-plugin-mockbamodular = { path = "../cardinal-plugin-mockbamodular" }
+cardinal-plugin-mog = { path = "../cardinal-plugin-mog" }
+cardinal-plugin-msm = { path = "../cardinal-plugin-msm" }
+cardinal-plugin-mus-x = { path = "../cardinal-plugin-mus-x" }
+cardinal-plugin-myth-modules = { path = "../cardinal-plugin-myth-modules" }
+cardinal-plugin-nonlinearcircuits = { path = "../cardinal-plugin-nonlinearcircuits" }
+cardinal-plugin-orbits = { path = "../cardinal-plugin-orbits" }
+cardinal-plugin-p21khz = { path = "../cardinal-plugin-p21khz" }
+cardinal-plugin-p8mode = { path = "../cardinal-plugin-p8mode" }
+cardinal-plugin-pathset = { path = "../cardinal-plugin-pathset" }
+cardinal-plugin-pdarray = { path = "../cardinal-plugin-pdarray" }
+cardinal-plugin-pinktrombone = { path = "../cardinal-plugin-pinktrombone" }
+cardinal-plugin-prism = { path = "../cardinal-plugin-prism" }
+cardinal-plugin-rackwindows = { path = "../cardinal-plugin-rackwindows" }
+cardinal-plugin-rcm-modules = { path = "../cardinal-plugin-rcm-modules" }
+cardinal-plugin-rebeltech = { path = "../cardinal-plugin-rebeltech" }
+cardinal-plugin-repelzen = { path = "../cardinal-plugin-repelzen" }
+cardinal-plugin-sapphire = { path = "../cardinal-plugin-sapphire" }
+cardinal-plugin-sonusmodular = { path = "../cardinal-plugin-sonusmodular" }
+cardinal-plugin-stocaudio = { path = "../cardinal-plugin-stocaudio" }
+cardinal-plugin-stoermelder-packone = { path = "../cardinal-plugin-stoermelder-packone" }
+cardinal-plugin-surgext-helper = { path = "../cardinal-plugin-surgext-helper" }
+cardinal-plugin-unless-modules = { path = "../cardinal-plugin-unless-modules" }
+cardinal-plugin-valleyaudio = { path = "../cardinal-plugin-valleyaudio" }
+cardinal-plugin-venom = { path = "../cardinal-plugin-venom" }
+cardinal-plugin-whattherack = { path = "../cardinal-plugin-whattherack" }
+cardinal-plugin-wstd-drums = { path = "../cardinal-plugin-wstd-drums" }
+cardinal-plugin-zetacarinaemodules = { path = "../cardinal-plugin-zetacarinaemodules" }
+cardinal-plugin-zzc = { path = "../cardinal-plugin-zzc" }
+
+[build-dependencies]
+cc = "1"

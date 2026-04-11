@@ -313,6 +313,637 @@ dependencies = [
 ]
 
 [[package]]
+name = "cardinal-plugin-aaronstatic"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-admiral"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-alefsbits"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-algoritmarte"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-amalgamatedharmonics"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-animatedcircuits"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-arableinstruments"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-as"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-autinn"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-axioma"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-befaco"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-bidoo"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-bidoodark"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-biset"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-bogaudiomodules"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-bogaudiomodules-helper"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-catromodulo"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-cf"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-chowdsp"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-computerscare"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-cvfunk"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-dbiz"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-dhe-modules"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-eightfold"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-enigmacurry"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-eseries"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-expertsleepers-encoders"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-extratone"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-fehlerfabrik"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-forsitan-modulare"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-fundamental"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-gluethegiant"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-goodsheperd"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-grandemodular"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-h4n4-modules"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-hamptonharmonics"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-ihtsyn"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-impromptumodular"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-impromptumodulardark"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-jw-modules"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-kocmoc"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-lifeformmodular"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-lilacloop"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-littleutils"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-lomasmodules"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-lyraemodules"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-meander"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-mindmeldmodular"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-ml-modules"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-mockbamodular"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-mog"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-msm"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-mus-x"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-myth-modules"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-nonlinearcircuits"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-orbits"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-p21khz"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-p8mode"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-pathset"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-pdarray"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-pinktrombone"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-prism"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-rackwindows"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-rcm-modules"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-rebeltech"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-repelzen"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-sapphire"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-sonusmodular"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-stocaudio"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-stoermelder-packone"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-surgext-helper"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-unless-modules"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-valleyaudio"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-venom"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-whattherack"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-wstd-drums"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-zetacarinaemodules"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugin-zzc"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "cardinal-plugins-registry"
+version = "0.1.0"
+dependencies = [
+ "cardinal-plugin-aaronstatic",
+ "cardinal-plugin-admiral",
+ "cardinal-plugin-alefsbits",
+ "cardinal-plugin-algoritmarte",
+ "cardinal-plugin-amalgamatedharmonics",
+ "cardinal-plugin-animatedcircuits",
+ "cardinal-plugin-arableinstruments",
+ "cardinal-plugin-as",
+ "cardinal-plugin-autinn",
+ "cardinal-plugin-axioma",
+ "cardinal-plugin-befaco",
+ "cardinal-plugin-bidoo",
+ "cardinal-plugin-bidoodark",
+ "cardinal-plugin-biset",
+ "cardinal-plugin-bogaudiomodules",
+ "cardinal-plugin-bogaudiomodules-helper",
+ "cardinal-plugin-catromodulo",
+ "cardinal-plugin-cf",
+ "cardinal-plugin-chowdsp",
+ "cardinal-plugin-computerscare",
+ "cardinal-plugin-cvfunk",
+ "cardinal-plugin-dbiz",
+ "cardinal-plugin-dhe-modules",
+ "cardinal-plugin-eightfold",
+ "cardinal-plugin-enigmacurry",
+ "cardinal-plugin-eseries",
+ "cardinal-plugin-expertsleepers-encoders",
+ "cardinal-plugin-extratone",
+ "cardinal-plugin-fehlerfabrik",
+ "cardinal-plugin-forsitan-modulare",
+ "cardinal-plugin-fundamental",
+ "cardinal-plugin-gluethegiant",
+ "cardinal-plugin-goodsheperd",
+ "cardinal-plugin-grandemodular",
+ "cardinal-plugin-h4n4-modules",
+ "cardinal-plugin-hamptonharmonics",
+ "cardinal-plugin-ihtsyn",
+ "cardinal-plugin-impromptumodular",
+ "cardinal-plugin-impromptumodulardark",
+ "cardinal-plugin-jw-modules",
+ "cardinal-plugin-kocmoc",
+ "cardinal-plugin-lifeformmodular",
+ "cardinal-plugin-lilacloop",
+ "cardinal-plugin-littleutils",
+ "cardinal-plugin-lomasmodules",
+ "cardinal-plugin-lyraemodules",
+ "cardinal-plugin-meander",
+ "cardinal-plugin-mindmeldmodular",
+ "cardinal-plugin-ml-modules",
+ "cardinal-plugin-mockbamodular",
+ "cardinal-plugin-mog",
+ "cardinal-plugin-msm",
+ "cardinal-plugin-mus-x",
+ "cardinal-plugin-myth-modules",
+ "cardinal-plugin-nonlinearcircuits",
+ "cardinal-plugin-orbits",
+ "cardinal-plugin-p21khz",
+ "cardinal-plugin-p8mode",
+ "cardinal-plugin-pathset",
+ "cardinal-plugin-pdarray",
+ "cardinal-plugin-pinktrombone",
+ "cardinal-plugin-prism",
+ "cardinal-plugin-rackwindows",
+ "cardinal-plugin-rcm-modules",
+ "cardinal-plugin-rebeltech",
+ "cardinal-plugin-repelzen",
+ "cardinal-plugin-sapphire",
+ "cardinal-plugin-sonusmodular",
+ "cardinal-plugin-stocaudio",
+ "cardinal-plugin-stoermelder-packone",
+ "cardinal-plugin-surgext-helper",
+ "cardinal-plugin-unless-modules",
+ "cardinal-plugin-valleyaudio",
+ "cardinal-plugin-venom",
+ "cardinal-plugin-whattherack",
+ "cardinal-plugin-wstd-drums",
+ "cardinal-plugin-zetacarinaemodules",
+ "cardinal-plugin-zzc",
+ "cc",
+]
+
+[[package]]
 name = "cc"
 version = "1.2.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"

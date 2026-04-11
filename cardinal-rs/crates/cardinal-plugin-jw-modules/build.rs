@@ -1,0 +1,134 @@
+use std::path::PathBuf;
+
+fn main() {
+    let cardinal_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent().unwrap()  // crates/
+        .parent().unwrap()  // cardinal-rs/
+        .parent().unwrap()  // Cardinal/
+        .to_path_buf();
+
+    let plugins_dir = cardinal_root.join("plugins");
+    let plugin_dir = plugins_dir.join("JW-Modules");
+
+    if !plugin_dir.exists() {
+        eprintln!("Plugin JW-Modules not found (submodule not initialized?), skipping");
+        return;
+    }
+
+    let rack_dir = cardinal_root.join("src/Rack");
+
+    let mut build = cc::Build::new();
+    build.cpp(true).std("c++17").warnings(false)
+        .define("ARCH_X64", None)
+        .define("ARCH_LIN", None)
+        .define("BUILDING_PLUGIN_MODULES", None);
+
+    // Rack includes
+    for dir in &[
+        rack_dir.join("include"),
+        rack_dir.join("dep/glfw/include"),
+        rack_dir.join("dep/nanovg/src"),
+        rack_dir.join("dep/nanosvg/src"),
+        rack_dir.join("dep/oui-blendish"),
+        rack_dir.join("dep/osdialog"),
+        rack_dir.join("dep/simde"),
+        rack_dir.join("dep/filesystem/include"),
+        rack_dir.join("dep/tinyexpr"),
+        rack_dir.join("dep/pffft"),
+        cardinal_root.join("include"),
+        cardinal_root.join("plugins"),
+        cardinal_root.join("dpf/distrho"),
+    ] {
+        build.include(dir);
+    }
+
+    // Plugin-local includes — recursively add src/ and dep subdirs
+    fn add_dirs(build: &mut cc::Build, dir: &std::path::Path, depth: u32) {
+        if depth > 4 || !dir.exists() { return; }
+        build.include(dir);
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for e in entries.flatten() {
+                if e.path().is_dir() {
+                    add_dirs(build, &e.path(), depth + 1);
+                }
+            }
+        }
+    }
+    add_dirs(&mut build, &plugin_dir.join("src"), 0);
+    for dep_dir in ["dep", "deps", "lib"] {
+        add_dirs(&mut build, &plugin_dir.join(dep_dir), 0);
+    }
+
+    // Symbol renames to avoid cross-plugin collisions
+
+    // Filter-out list
+    let filter_out: Vec<String> = vec![
+        "JW-Modules/src/JWModules.cpp".to_string(),
+        "JW-Modules/src/Str1ker.cpp".to_string(),
+    ];
+
+    // Source files
+
+    // Glob JW-Modules/lib/oscpack/ip/*.cpp
+    if let Ok(entries) = std::fs::read_dir(plugins_dir.join("JW-Modules/lib/oscpack/ip")) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map_or(true, |e| e != "cpp" && e != "cc" && e != "c") { continue; }
+            let rel = path.strip_prefix(&plugins_dir).unwrap().to_str().unwrap().to_string();
+            if !filter_out.contains(&rel) {
+                build.file(&path);
+            }
+        }
+    }
+
+    // Glob JW-Modules/lib/oscpack/ip/posix/*.cpp
+    if let Ok(entries) = std::fs::read_dir(plugins_dir.join("JW-Modules/lib/oscpack/ip/posix")) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map_or(true, |e| e != "cpp" && e != "cc" && e != "c") { continue; }
+            let rel = path.strip_prefix(&plugins_dir).unwrap().to_str().unwrap().to_string();
+            if !filter_out.contains(&rel) {
+                build.file(&path);
+            }
+        }
+    }
+
+    // Glob JW-Modules/lib/oscpack/ip/win32/*.cpp
+    if let Ok(entries) = std::fs::read_dir(plugins_dir.join("JW-Modules/lib/oscpack/ip/win32")) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map_or(true, |e| e != "cpp" && e != "cc" && e != "c") { continue; }
+            let rel = path.strip_prefix(&plugins_dir).unwrap().to_str().unwrap().to_string();
+            if !filter_out.contains(&rel) {
+                build.file(&path);
+            }
+        }
+    }
+
+    // Glob JW-Modules/lib/oscpack/osc/*.cpp
+    if let Ok(entries) = std::fs::read_dir(plugins_dir.join("JW-Modules/lib/oscpack/osc")) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map_or(true, |e| e != "cpp" && e != "cc" && e != "c") { continue; }
+            let rel = path.strip_prefix(&plugins_dir).unwrap().to_str().unwrap().to_string();
+            if !filter_out.contains(&rel) {
+                build.file(&path);
+            }
+        }
+    }
+
+    // Glob JW-Modules/src/*.cpp
+    if let Ok(entries) = std::fs::read_dir(plugins_dir.join("JW-Modules/src")) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map_or(true, |e| e != "cpp" && e != "cc" && e != "c") { continue; }
+            let rel = path.strip_prefix(&plugins_dir).unwrap().to_str().unwrap().to_string();
+            if !filter_out.contains(&rel) {
+                build.file(&path);
+            }
+        }
+    }
+    build.file(plugins_dir.join("JW-Modules/src/Str1ker.cpp"));
+
+    build.compile("cardinal_plugin_jw_modules");
+}
