@@ -29,16 +29,20 @@ CRATES_DIR = CARDINAL_ROOT / "cardinal-rs" / "crates"
 
 # Plugins that need external deps we can't provide
 SKIP_PLUGINS = {
-    "Cardinal",           # RTNeural, Carla, JUCE
-    "HetrickCV",          # Gamma DSP library
-    "surgext",            # Surge synthesizer engine
-    "StarlingVia",        # Custom starling submodule
-    "ParableInstruments", # Mutable Instruments eurorack DSP
-    "AudibleInstruments", # Needs eurorack DSP build
-    "voxglitch",          # Custom vgLib
-    "mscHack",            # Missing source files
-    "BaconPlugs",         # sst/filters dependency
-    "AriaModules",        # QuickJS dependency
+    "Cardinal",              # RTNeural, Carla, JUCE
+    "HetrickCV",             # Gamma DSP library
+    "surgext",               # Surge synthesizer engine
+    "StarlingVia",           # Custom starling submodule
+    "ParableInstruments",    # Mutable Instruments eurorack DSP
+    "AudibleInstruments",    # Needs eurorack DSP build
+    "ArableInstruments",     # Needs eurorack DSP from AudibleInstruments
+    "voxglitch",             # Custom vgLib
+    "mscHack",               # Missing source files
+    "BaconPlugs",            # sst/filters dependency
+    "AriaModules",           # QuickJS dependency
+    "BogaudioModules-helper", # Needs BogaudioModules cross-crate includes
+    "surgext-helper",        # Needs surgext cross-crate includes
+    "DHE-Modules",           # Non-standard source layout
 }
 
 def parse_drwav_list(makefile_text):
@@ -223,9 +227,12 @@ cc = "1"
         defines_code += f'    build.define("init", "init__{pi_rename}");\n'
 
     for sym in custom_renames:
-        defines_code += f'    build.define("{sym}", "{vendor}{sym}");\n'
-        defines_code += f'    build.define("model{sym}", "model{vendor}{sym}");\n'
-        defines_code += f'    build.define("{sym}Widget", "{vendor}{sym}Widget");\n'
+        # Use pi_rename as prefix (matches the Makefile's convention)
+        # Falls back to vendor name if no pi_rename
+        prefix = pi_rename if pi_rename else vendor
+        defines_code += f'    build.define("{sym}", "{prefix}{sym}");\n'
+        defines_code += f'    build.define("model{sym}", "model{prefix}{sym}");\n'
+        defines_code += f'    build.define("{sym}Widget", "{prefix}{sym}Widget");\n'
 
     # Source collection code
     source_code_parts = []

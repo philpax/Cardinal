@@ -10,7 +10,6 @@ cardinal-plugin-alefsbits = { path = "../cardinal-plugin-alefsbits" }
 cardinal-plugin-algoritmarte = { path = "../cardinal-plugin-algoritmarte" }
 cardinal-plugin-amalgamatedharmonics = { path = "../cardinal-plugin-amalgamatedharmonics" }
 cardinal-plugin-animatedcircuits = { path = "../cardinal-plugin-animatedcircuits" }
-cardinal-plugin-arableinstruments = { path = "../cardinal-plugin-arableinstruments" }
 cardinal-plugin-as = { path = "../cardinal-plugin-as" }
 cardinal-plugin-autinn = { path = "../cardinal-plugin-autinn" }
 cardinal-plugin-axioma = { path = "../cardinal-plugin-axioma" }
@@ -19,14 +18,12 @@ cardinal-plugin-bidoo = { path = "../cardinal-plugin-bidoo" }
 cardinal-plugin-bidoodark = { path = "../cardinal-plugin-bidoodark" }
 cardinal-plugin-biset = { path = "../cardinal-plugin-biset" }
 cardinal-plugin-bogaudiomodules = { path = "../cardinal-plugin-bogaudiomodules" }
-cardinal-plugin-bogaudiomodules-helper = { path = "../cardinal-plugin-bogaudiomodules-helper" }
 cardinal-plugin-catromodulo = { path = "../cardinal-plugin-catromodulo" }
 cardinal-plugin-cf = { path = "../cardinal-plugin-cf" }
 cardinal-plugin-chowdsp = { path = "../cardinal-plugin-chowdsp" }
 cardinal-plugin-computerscare = { path = "../cardinal-plugin-computerscare" }
 cardinal-plugin-cvfunk = { path = "../cardinal-plugin-cvfunk" }
 cardinal-plugin-dbiz = { path = "../cardinal-plugin-dbiz" }
-cardinal-plugin-dhe-modules = { path = "../cardinal-plugin-dhe-modules" }
 cardinal-plugin-eightfold = { path = "../cardinal-plugin-eightfold" }
 cardinal-plugin-enigmacurry = { path = "../cardinal-plugin-enigmacurry" }
 cardinal-plugin-eseries = { path = "../cardinal-plugin-eseries" }
@@ -74,7 +71,6 @@ cardinal-plugin-sapphire = { path = "../cardinal-plugin-sapphire" }
 cardinal-plugin-sonusmodular = { path = "../cardinal-plugin-sonusmodular" }
 cardinal-plugin-stocaudio = { path = "../cardinal-plugin-stocaudio" }
 cardinal-plugin-stoermelder-packone = { path = "../cardinal-plugin-stoermelder-packone" }
-cardinal-plugin-surgext-helper = { path = "../cardinal-plugin-surgext-helper" }
 cardinal-plugin-unless-modules = { path = "../cardinal-plugin-unless-modules" }
 cardinal-plugin-valleyaudio = { path = "../cardinal-plugin-valleyaudio" }
 cardinal-plugin-venom = { path = "../cardinal-plugin-venom" }

@@ -62,15 +62,15 @@ fn main() {
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__WSTD_Drums");
     build.define("init", "init__WSTD_Drums");
-    build.define("ADSR", "WSTD-DrumsADSR");
-    build.define("modelADSR", "modelWSTD-DrumsADSR");
-    build.define("ADSRWidget", "WSTD-DrumsADSRWidget");
-    build.define("Envelope", "WSTD-DrumsEnvelope");
-    build.define("modelEnvelope", "modelWSTD-DrumsEnvelope");
-    build.define("EnvelopeWidget", "WSTD-DrumsEnvelopeWidget");
-    build.define("LowFrequencyOscillator", "WSTD-DrumsLowFrequencyOscillator");
-    build.define("modelLowFrequencyOscillator", "modelWSTD-DrumsLowFrequencyOscillator");
-    build.define("LowFrequencyOscillatorWidget", "WSTD-DrumsLowFrequencyOscillatorWidget");
+    build.define("ADSR", "WSTD_DrumsADSR");
+    build.define("modelADSR", "modelWSTD_DrumsADSR");
+    build.define("ADSRWidget", "WSTD_DrumsADSRWidget");
+    build.define("Envelope", "WSTD_DrumsEnvelope");
+    build.define("modelEnvelope", "modelWSTD_DrumsEnvelope");
+    build.define("EnvelopeWidget", "WSTD_DrumsEnvelopeWidget");
+    build.define("LowFrequencyOscillator", "WSTD_DrumsLowFrequencyOscillator");
+    build.define("modelLowFrequencyOscillator", "modelWSTD_DrumsLowFrequencyOscillator");
+    build.define("LowFrequencyOscillatorWidget", "WSTD_DrumsLowFrequencyOscillatorWidget");
 
     // Filter-out list
     let filter_out: Vec<String> = vec![

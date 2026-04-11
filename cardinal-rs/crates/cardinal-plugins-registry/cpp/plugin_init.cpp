@@ -68,7 +68,6 @@ extern rack::plugin::Plugin* pluginInstance__AaronStatic;
 extern rack::plugin::Plugin* pluginInstance__Algoritmarte;
 extern rack::plugin::Plugin* pluginInstance__AmalgamatedHarmonics;
 extern rack::plugin::Plugin* pluginInstance__AnimatedCircuits;
-extern rack::plugin::Plugin* pluginInstance__ArableInstruments;
 extern rack::plugin::Plugin* pluginInstance__Autinn;
 extern rack::plugin::Plugin* pluginInstance__Axioma;
 extern rack::plugin::Plugin* pluginInstance__Befaco;
@@ -133,7 +132,6 @@ extern "C++" void init__AaronStatic(rack::plugin::Plugin*);
 extern "C++" void init__Algoritmarte(rack::plugin::Plugin*);
 extern "C++" void init__AmalgamatedHarmonics(rack::plugin::Plugin*);
 extern "C++" void init__AnimatedCircuits(rack::plugin::Plugin*);
-extern "C++" void init__ArableInstruments(rack::plugin::Plugin*);
 extern "C++" void init__Autinn(rack::plugin::Plugin*);
 extern "C++" void init__Axioma(rack::plugin::Plugin*);
 extern "C++" void init__Befaco(rack::plugin::Plugin*);
@@ -237,12 +235,6 @@ void initStaticPlugins() {
         pluginInstance__AnimatedCircuits = p;
         const StaticPluginLoader spl(p, "AnimatedCircuits");
         if (spl.ok()) init__AnimatedCircuits(p);
-    }
-    {
-        Plugin* const p = new Plugin;
-        pluginInstance__ArableInstruments = p;
-        const StaticPluginLoader spl(p, "ArableInstruments");
-        if (spl.ok()) init__ArableInstruments(p);
     }
     {
         Plugin* const p = new Plugin;
