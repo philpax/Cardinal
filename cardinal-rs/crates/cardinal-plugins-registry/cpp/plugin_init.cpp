@@ -89,12 +89,17 @@ extern rack::plugin::Plugin* pluginInstance__GoodSheperd;
 extern rack::plugin::Plugin* pluginInstance__GrandeModular;
 extern rack::plugin::Plugin* pluginInstance__HamptonHarmonics;
 extern rack::plugin::Plugin* pluginInstance__ImpromptuModular;
+extern rack::plugin::Plugin* pluginInstance__JW;
 extern rack::plugin::Plugin* pluginInstance__LifeFormModular;
 extern rack::plugin::Plugin* pluginInstance__LilacLoop;
 extern rack::plugin::Plugin* pluginInstance__LittleUtils;
+extern rack::plugin::Plugin* pluginInstance__Lomas;
+extern rack::plugin::Plugin* pluginInstance__Lyrae;
+extern rack::plugin::Plugin* pluginInstance__ML;
 extern rack::plugin::Plugin* pluginInstance__MSM;
 extern rack::plugin::Plugin* pluginInstance__MUS_X;
 extern rack::plugin::Plugin* pluginInstance__Meander;
+extern rack::plugin::Plugin* pluginInstance__MindMeld;
 extern rack::plugin::Plugin* pluginInstance__MockbaModular;
 extern rack::plugin::Plugin* pluginInstance__Mog;
 extern rack::plugin::Plugin* pluginInstance__Orbits;
@@ -115,14 +120,18 @@ extern rack::plugin::Plugin* pluginInstance__alefsbits;
 extern rack::plugin::Plugin* pluginInstance__cf;
 extern rack::plugin::Plugin* pluginInstance__dBiz;
 extern rack::plugin::Plugin* pluginInstance__eightfold;
+extern rack::plugin::Plugin* pluginInstance__forsitan;
+extern rack::plugin::Plugin* pluginInstance__H4N4;
 extern rack::plugin::Plugin* pluginInstance__ihtsyn;
 extern rack::plugin::Plugin* pluginInstance__kocmoc;
 extern rack::plugin::Plugin* pluginInstance__myth_modules;
 extern rack::plugin::Plugin* pluginInstance__nonlinearcircuits;
 extern rack::plugin::Plugin* pluginInstance__rackwindows;
+extern rack::plugin::Plugin* pluginInstance__RCM;
 extern rack::plugin::Plugin* pluginInstance__repelzen;
 extern rack::plugin::Plugin* pluginInstance__sonusmodular;
 extern rack::plugin::Plugin* pluginInstance__stocaudio;
+extern rack::plugin::Plugin* pluginInstance__stoermelder_p1;
 extern rack::plugin::Plugin* pluginInstance__unless_modules;
 
 extern "C++" void init__21kHz(rack::plugin::Plugin*);
@@ -153,12 +162,17 @@ extern "C++" void init__GoodSheperd(rack::plugin::Plugin*);
 extern "C++" void init__GrandeModular(rack::plugin::Plugin*);
 extern "C++" void init__HamptonHarmonics(rack::plugin::Plugin*);
 extern "C++" void init__ImpromptuModular(rack::plugin::Plugin*);
+extern "C++" void init__JW(rack::plugin::Plugin*);
 extern "C++" void init__LifeFormModular(rack::plugin::Plugin*);
 extern "C++" void init__LilacLoop(rack::plugin::Plugin*);
 extern "C++" void init__LittleUtils(rack::plugin::Plugin*);
+extern "C++" void init__Lomas(rack::plugin::Plugin*);
+extern "C++" void init__Lyrae(rack::plugin::Plugin*);
+extern "C++" void init__ML(rack::plugin::Plugin*);
 extern "C++" void init__MSM(rack::plugin::Plugin*);
 extern "C++" void init__MUS_X(rack::plugin::Plugin*);
 extern "C++" void init__Meander(rack::plugin::Plugin*);
+extern "C++" void init__MindMeld(rack::plugin::Plugin*);
 extern "C++" void init__MockbaModular(rack::plugin::Plugin*);
 extern "C++" void init__Mog(rack::plugin::Plugin*);
 extern "C++" void init__Orbits(rack::plugin::Plugin*);
@@ -179,14 +193,18 @@ extern "C++" void init__alefsbits(rack::plugin::Plugin*);
 extern "C++" void init__cf(rack::plugin::Plugin*);
 extern "C++" void init__dBiz(rack::plugin::Plugin*);
 extern "C++" void init__eightfold(rack::plugin::Plugin*);
+extern "C++" void init__forsitan(rack::plugin::Plugin*);
+extern "C++" void init__H4N4(rack::plugin::Plugin*);
 extern "C++" void init__ihtsyn(rack::plugin::Plugin*);
 extern "C++" void init__kocmoc(rack::plugin::Plugin*);
 extern "C++" void init__myth_modules(rack::plugin::Plugin*);
 extern "C++" void init__nonlinearcircuits(rack::plugin::Plugin*);
 extern "C++" void init__rackwindows(rack::plugin::Plugin*);
+extern "C++" void init__RCM(rack::plugin::Plugin*);
 extern "C++" void init__repelzen(rack::plugin::Plugin*);
 extern "C++" void init__sonusmodular(rack::plugin::Plugin*);
 extern "C++" void init__stocaudio(rack::plugin::Plugin*);
+extern "C++" void init__stoermelder_p1(rack::plugin::Plugin*);
 extern "C++" void init__unless_modules(rack::plugin::Plugin*);
 
 // Master init function called by the bridge
@@ -364,6 +382,12 @@ void initStaticPlugins() {
     }
     {
         Plugin* const p = new Plugin;
+        pluginInstance__JW = p;
+        const StaticPluginLoader spl(p, "JW-Modules");
+        if (spl.ok()) init__JW(p);
+    }
+    {
+        Plugin* const p = new Plugin;
         pluginInstance__LifeFormModular = p;
         const StaticPluginLoader spl(p, "LifeFormModular");
         if (spl.ok()) init__LifeFormModular(p);
@@ -382,6 +406,24 @@ void initStaticPlugins() {
     }
     {
         Plugin* const p = new Plugin;
+        pluginInstance__Lomas = p;
+        const StaticPluginLoader spl(p, "LomasModules");
+        if (spl.ok()) init__Lomas(p);
+    }
+    {
+        Plugin* const p = new Plugin;
+        pluginInstance__Lyrae = p;
+        const StaticPluginLoader spl(p, "LyraeModules");
+        if (spl.ok()) init__Lyrae(p);
+    }
+    {
+        Plugin* const p = new Plugin;
+        pluginInstance__ML = p;
+        const StaticPluginLoader spl(p, "ML_modules");
+        if (spl.ok()) init__ML(p);
+    }
+    {
+        Plugin* const p = new Plugin;
         pluginInstance__MSM = p;
         const StaticPluginLoader spl(p, "MSM");
         if (spl.ok()) init__MSM(p);
@@ -397,6 +439,12 @@ void initStaticPlugins() {
         pluginInstance__Meander = p;
         const StaticPluginLoader spl(p, "Meander");
         if (spl.ok()) init__Meander(p);
+    }
+    {
+        Plugin* const p = new Plugin;
+        pluginInstance__MindMeld = p;
+        const StaticPluginLoader spl(p, "MindMeldModular");
+        if (spl.ok()) init__MindMeld(p);
     }
     {
         Plugin* const p = new Plugin;
@@ -520,6 +568,18 @@ void initStaticPlugins() {
     }
     {
         Plugin* const p = new Plugin;
+        pluginInstance__forsitan = p;
+        const StaticPluginLoader spl(p, "forsitan-modulare");
+        if (spl.ok()) init__forsitan(p);
+    }
+    {
+        Plugin* const p = new Plugin;
+        pluginInstance__H4N4 = p;
+        const StaticPluginLoader spl(p, "h4n4-modules");
+        if (spl.ok()) init__H4N4(p);
+    }
+    {
+        Plugin* const p = new Plugin;
         pluginInstance__ihtsyn = p;
         const StaticPluginLoader spl(p, "ihtsyn");
         if (spl.ok()) init__ihtsyn(p);
@@ -550,6 +610,12 @@ void initStaticPlugins() {
     }
     {
         Plugin* const p = new Plugin;
+        pluginInstance__RCM = p;
+        const StaticPluginLoader spl(p, "rcm-modules");
+        if (spl.ok()) init__RCM(p);
+    }
+    {
+        Plugin* const p = new Plugin;
         pluginInstance__repelzen = p;
         const StaticPluginLoader spl(p, "repelzen");
         if (spl.ok()) init__repelzen(p);
@@ -565,6 +631,12 @@ void initStaticPlugins() {
         pluginInstance__stocaudio = p;
         const StaticPluginLoader spl(p, "stocaudio");
         if (spl.ok()) init__stocaudio(p);
+    }
+    {
+        Plugin* const p = new Plugin;
+        pluginInstance__stoermelder_p1 = p;
+        const StaticPluginLoader spl(p, "stoermelder-packone");
+        if (spl.ok()) init__stoermelder_p1(p);
     }
     {
         Plugin* const p = new Plugin;

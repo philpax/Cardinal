@@ -155,12 +155,34 @@ def parse_makefile():
             # by looking at the build rule context
             pi_renames[suffix] = suffix
 
+    # Explicit directory→pi_rename mappings for cases where normalization fails
+    EXPLICIT_PI_RENAMES = {
+        "stoermelder-packone": "stoermelder_p1",
+        "forsitan-modulare": "forsitan",
+        "ML_modules": "ML",
+        "rcm-modules": "RCM",
+        "h4n4-modules": "H4N4",
+        "myth-modules": "myth_modules",
+        "ExpertSleepers-Encoders": "ExpertSleepersEncoders",
+        "MindMeldModular": "MindMeld",
+        "BogaudioModules": "BogaudioModules",
+        "LyraeModules": "Lyrae",
+        "LomasModules": "Lomas",
+        "MUS-X": "MUS_X",
+        "JW-Modules": "JW",
+        "GlueTheGiant": "GlueTheGiant",
+        "WSTD-Drums": "WSTD_Drums",
+        "ImpromptuModular": "ImpromptuModular",
+        "BaconPlugs": "Bacon",
+        "WhatTheRack": "WhatTheRack",
+        "PinkTrombone": "PinkTrombone",
+        "unless_modules": "unless_modules",
+    }
+
     # Map CUSTOM names to plugin dirs
-    # The naming convention is: UPPERCASE version of dir name
     for vendor, info in plugins.items():
         upper = vendor.upper().replace("-", "_").replace(" ", "_")
 
-        # Try various name patterns
         for key in [upper, vendor.upper(), vendor.replace("-", "").upper()]:
             if key in custom_map:
                 info["custom_renames"] = custom_map[key]
@@ -171,12 +193,14 @@ def parse_makefile():
                 info["custom_per_file"] = custom_per_file_map[key]
                 break
 
-        # pluginInstance rename
-        # Convention: -DpluginInstance=pluginInstance__VendorName
-        for suffix in pi_renames:
-            if suffix.lower().replace("_", "") == vendor.lower().replace("-", "").replace("_", ""):
-                info["pi_rename"] = suffix
-                break
+        # pluginInstance rename — use explicit map first, then fuzzy match
+        if vendor in EXPLICIT_PI_RENAMES:
+            info["pi_rename"] = EXPLICIT_PI_RENAMES[vendor]
+        else:
+            for suffix in pi_renames:
+                if suffix.lower().replace("_", "") == vendor.lower().replace("-", "").replace("_", ""):
+                    info["pi_rename"] = suffix
+                    break
 
     return plugins, drwav_symbols
 
@@ -238,21 +262,25 @@ cc = "1"
     source_code_parts = []
 
     for sd in source_dirs:
-        ext = "cpp"
-        if sd.endswith(".cc") or "/eurorack/" in sd:
-            ext = "cc"
         source_code_parts.append(f"""
-    // Glob {sd}/*.{ext}
-    if let Ok(entries) = std::fs::read_dir(plugins_dir.join("{sd}")) {{
-        for entry in entries.flatten() {{
-            let path = entry.path();
-            if path.extension().map_or(true, |e| e != "cpp" && e != "cc" && e != "c") {{ continue; }}
-            let rel = path.strip_prefix(&plugins_dir).unwrap().to_str().unwrap().to_string();
-            if !filter_out.contains(&rel) {{
-                build.file(&path);
+    // Glob {sd}/**/*.cpp|cc|c (recursive)
+    fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {{
+        if depth > 5 || !dir.exists() {{ return; }}
+        if let Ok(entries) = std::fs::read_dir(dir) {{
+            for entry in entries.flatten() {{
+                let path = entry.path();
+                if path.is_dir() {{
+                    collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
+                }} else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {{
+                    let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
+                    if !filter_out.contains(&rel) {{
+                        build.file(&path);
+                    }}
+                }}
             }}
         }}
-    }}""")
+    }}
+    collect_sources(&plugins_dir.join("{sd}"), &filter_out, &plugins_dir, &mut build, 0);""")
 
     for ef in explicit_files:
         source_code_parts.append(f'    build.file(plugins_dir.join("{ef}"));')

@@ -79,77 +79,119 @@ fn main() {
 
     // Source files
 
-    // Glob WSTD-Drums/deps/*.cpp
-    if let Ok(entries) = std::fs::read_dir(plugins_dir.join("WSTD-Drums/deps")) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().map_or(true, |e| e != "cpp" && e != "cc" && e != "c") { continue; }
-            let rel = path.strip_prefix(&plugins_dir).unwrap().to_str().unwrap().to_string();
-            if !filter_out.contains(&rel) {
-                build.file(&path);
+    // Glob WSTD-Drums/deps/**/*.cpp|cc|c (recursive)
+    fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
+        if depth > 5 || !dir.exists() { return; }
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
+                } else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {
+                    let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
+                    if !filter_out.contains(&rel) {
+                        build.file(&path);
+                    }
+                }
             }
         }
     }
+    collect_sources(&plugins_dir.join("WSTD-Drums/deps"), &filter_out, &plugins_dir, &mut build, 0);
 
-    // Glob WSTD-Drums/deps/SynthDevKit/src/*.cpp
-    if let Ok(entries) = std::fs::read_dir(plugins_dir.join("WSTD-Drums/deps/SynthDevKit/src")) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().map_or(true, |e| e != "cpp" && e != "cc" && e != "c") { continue; }
-            let rel = path.strip_prefix(&plugins_dir).unwrap().to_str().unwrap().to_string();
-            if !filter_out.contains(&rel) {
-                build.file(&path);
+    // Glob WSTD-Drums/deps/SynthDevKit/src/**/*.cpp|cc|c (recursive)
+    fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
+        if depth > 5 || !dir.exists() { return; }
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
+                } else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {
+                    let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
+                    if !filter_out.contains(&rel) {
+                        build.file(&path);
+                    }
+                }
             }
         }
     }
+    collect_sources(&plugins_dir.join("WSTD-Drums/deps/SynthDevKit/src"), &filter_out, &plugins_dir, &mut build, 0);
 
-    // Glob WSTD-Drums/src/*.cpp
-    if let Ok(entries) = std::fs::read_dir(plugins_dir.join("WSTD-Drums/src")) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().map_or(true, |e| e != "cpp" && e != "cc" && e != "c") { continue; }
-            let rel = path.strip_prefix(&plugins_dir).unwrap().to_str().unwrap().to_string();
-            if !filter_out.contains(&rel) {
-                build.file(&path);
+    // Glob WSTD-Drums/src/**/*.cpp|cc|c (recursive)
+    fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
+        if depth > 5 || !dir.exists() { return; }
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
+                } else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {
+                    let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
+                    if !filter_out.contains(&rel) {
+                        build.file(&path);
+                    }
+                }
             }
         }
     }
+    collect_sources(&plugins_dir.join("WSTD-Drums/src"), &filter_out, &plugins_dir, &mut build, 0);
 
-    // Glob WSTD-Drums/src/controller/*.cpp
-    if let Ok(entries) = std::fs::read_dir(plugins_dir.join("WSTD-Drums/src/controller")) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().map_or(true, |e| e != "cpp" && e != "cc" && e != "c") { continue; }
-            let rel = path.strip_prefix(&plugins_dir).unwrap().to_str().unwrap().to_string();
-            if !filter_out.contains(&rel) {
-                build.file(&path);
+    // Glob WSTD-Drums/src/controller/**/*.cpp|cc|c (recursive)
+    fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
+        if depth > 5 || !dir.exists() { return; }
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
+                } else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {
+                    let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
+                    if !filter_out.contains(&rel) {
+                        build.file(&path);
+                    }
+                }
             }
         }
     }
+    collect_sources(&plugins_dir.join("WSTD-Drums/src/controller"), &filter_out, &plugins_dir, &mut build, 0);
 
-    // Glob WSTD-Drums/src/model/*.cpp
-    if let Ok(entries) = std::fs::read_dir(plugins_dir.join("WSTD-Drums/src/model")) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().map_or(true, |e| e != "cpp" && e != "cc" && e != "c") { continue; }
-            let rel = path.strip_prefix(&plugins_dir).unwrap().to_str().unwrap().to_string();
-            if !filter_out.contains(&rel) {
-                build.file(&path);
+    // Glob WSTD-Drums/src/model/**/*.cpp|cc|c (recursive)
+    fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
+        if depth > 5 || !dir.exists() { return; }
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
+                } else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {
+                    let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
+                    if !filter_out.contains(&rel) {
+                        build.file(&path);
+                    }
+                }
             }
         }
     }
+    collect_sources(&plugins_dir.join("WSTD-Drums/src/model"), &filter_out, &plugins_dir, &mut build, 0);
 
-    // Glob WSTD-Drums/src/view/*.cpp
-    if let Ok(entries) = std::fs::read_dir(plugins_dir.join("WSTD-Drums/src/view")) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().map_or(true, |e| e != "cpp" && e != "cc" && e != "c") { continue; }
-            let rel = path.strip_prefix(&plugins_dir).unwrap().to_str().unwrap().to_string();
-            if !filter_out.contains(&rel) {
-                build.file(&path);
+    // Glob WSTD-Drums/src/view/**/*.cpp|cc|c (recursive)
+    fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
+        if depth > 5 || !dir.exists() { return; }
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
+                } else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {
+                    let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
+                    if !filter_out.contains(&rel) {
+                        build.file(&path);
+                    }
+                }
             }
         }
     }
+    collect_sources(&plugins_dir.join("WSTD-Drums/src/view"), &filter_out, &plugins_dir, &mut build, 0);
 
     build.compile("cardinal_plugin_wstd_drums");
 }

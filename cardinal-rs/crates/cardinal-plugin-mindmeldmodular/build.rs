@@ -60,6 +60,8 @@ fn main() {
     }
 
     // Symbol renames to avoid cross-plugin collisions
+    build.define("pluginInstance", "pluginInstance__MindMeld");
+    build.define("init", "init__MindMeld");
 
     // Filter-out list
     let filter_out: Vec<String> = vec![
@@ -68,89 +70,138 @@ fn main() {
 
     // Source files
 
-    // Glob MindMeldModular/src/*.cpp
-    if let Ok(entries) = std::fs::read_dir(plugins_dir.join("MindMeldModular/src")) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().map_or(true, |e| e != "cpp" && e != "cc" && e != "c") { continue; }
-            let rel = path.strip_prefix(&plugins_dir).unwrap().to_str().unwrap().to_string();
-            if !filter_out.contains(&rel) {
-                build.file(&path);
+    // Glob MindMeldModular/src/**/*.cpp|cc|c (recursive)
+    fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
+        if depth > 5 || !dir.exists() { return; }
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
+                } else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {
+                    let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
+                    if !filter_out.contains(&rel) {
+                        build.file(&path);
+                    }
+                }
             }
         }
     }
+    collect_sources(&plugins_dir.join("MindMeldModular/src"), &filter_out, &plugins_dir, &mut build, 0);
 
-    // Glob MindMeldModular/src/EqMaster/*.cpp
-    if let Ok(entries) = std::fs::read_dir(plugins_dir.join("MindMeldModular/src/EqMaster")) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().map_or(true, |e| e != "cpp" && e != "cc" && e != "c") { continue; }
-            let rel = path.strip_prefix(&plugins_dir).unwrap().to_str().unwrap().to_string();
-            if !filter_out.contains(&rel) {
-                build.file(&path);
+    // Glob MindMeldModular/src/EqMaster/**/*.cpp|cc|c (recursive)
+    fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
+        if depth > 5 || !dir.exists() { return; }
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
+                } else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {
+                    let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
+                    if !filter_out.contains(&rel) {
+                        build.file(&path);
+                    }
+                }
             }
         }
     }
+    collect_sources(&plugins_dir.join("MindMeldModular/src/EqMaster"), &filter_out, &plugins_dir, &mut build, 0);
 
-    // Glob MindMeldModular/src/MixMaster/*.cpp
-    if let Ok(entries) = std::fs::read_dir(plugins_dir.join("MindMeldModular/src/MixMaster")) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().map_or(true, |e| e != "cpp" && e != "cc" && e != "c") { continue; }
-            let rel = path.strip_prefix(&plugins_dir).unwrap().to_str().unwrap().to_string();
-            if !filter_out.contains(&rel) {
-                build.file(&path);
+    // Glob MindMeldModular/src/MixMaster/**/*.cpp|cc|c (recursive)
+    fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
+        if depth > 5 || !dir.exists() { return; }
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
+                } else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {
+                    let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
+                    if !filter_out.contains(&rel) {
+                        build.file(&path);
+                    }
+                }
             }
         }
     }
+    collect_sources(&plugins_dir.join("MindMeldModular/src/MixMaster"), &filter_out, &plugins_dir, &mut build, 0);
 
-    // Glob MindMeldModular/src/PatchSet/*.cpp
-    if let Ok(entries) = std::fs::read_dir(plugins_dir.join("MindMeldModular/src/PatchSet")) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().map_or(true, |e| e != "cpp" && e != "cc" && e != "c") { continue; }
-            let rel = path.strip_prefix(&plugins_dir).unwrap().to_str().unwrap().to_string();
-            if !filter_out.contains(&rel) {
-                build.file(&path);
+    // Glob MindMeldModular/src/PatchSet/**/*.cpp|cc|c (recursive)
+    fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
+        if depth > 5 || !dir.exists() { return; }
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
+                } else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {
+                    let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
+                    if !filter_out.contains(&rel) {
+                        build.file(&path);
+                    }
+                }
             }
         }
     }
+    collect_sources(&plugins_dir.join("MindMeldModular/src/PatchSet"), &filter_out, &plugins_dir, &mut build, 0);
 
-    // Glob MindMeldModular/src/ShapeMaster/*.cpp
-    if let Ok(entries) = std::fs::read_dir(plugins_dir.join("MindMeldModular/src/ShapeMaster")) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().map_or(true, |e| e != "cpp" && e != "cc" && e != "c") { continue; }
-            let rel = path.strip_prefix(&plugins_dir).unwrap().to_str().unwrap().to_string();
-            if !filter_out.contains(&rel) {
-                build.file(&path);
+    // Glob MindMeldModular/src/ShapeMaster/**/*.cpp|cc|c (recursive)
+    fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
+        if depth > 5 || !dir.exists() { return; }
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
+                } else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {
+                    let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
+                    if !filter_out.contains(&rel) {
+                        build.file(&path);
+                    }
+                }
             }
         }
     }
+    collect_sources(&plugins_dir.join("MindMeldModular/src/ShapeMaster"), &filter_out, &plugins_dir, &mut build, 0);
 
-    // Glob MindMeldModular/src/Utilities/*.cpp
-    if let Ok(entries) = std::fs::read_dir(plugins_dir.join("MindMeldModular/src/Utilities")) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().map_or(true, |e| e != "cpp" && e != "cc" && e != "c") { continue; }
-            let rel = path.strip_prefix(&plugins_dir).unwrap().to_str().unwrap().to_string();
-            if !filter_out.contains(&rel) {
-                build.file(&path);
+    // Glob MindMeldModular/src/Utilities/**/*.cpp|cc|c (recursive)
+    fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
+        if depth > 5 || !dir.exists() { return; }
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
+                } else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {
+                    let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
+                    if !filter_out.contains(&rel) {
+                        build.file(&path);
+                    }
+                }
             }
         }
     }
+    collect_sources(&plugins_dir.join("MindMeldModular/src/Utilities"), &filter_out, &plugins_dir, &mut build, 0);
 
-    // Glob MindMeldModular/src/comp/*.cpp
-    if let Ok(entries) = std::fs::read_dir(plugins_dir.join("MindMeldModular/src/comp")) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().map_or(true, |e| e != "cpp" && e != "cc" && e != "c") { continue; }
-            let rel = path.strip_prefix(&plugins_dir).unwrap().to_str().unwrap().to_string();
-            if !filter_out.contains(&rel) {
-                build.file(&path);
+    // Glob MindMeldModular/src/comp/**/*.cpp|cc|c (recursive)
+    fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
+        if depth > 5 || !dir.exists() { return; }
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
+                } else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {
+                    let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
+                    if !filter_out.contains(&rel) {
+                        build.file(&path);
+                    }
+                }
             }
         }
     }
+    collect_sources(&plugins_dir.join("MindMeldModular/src/comp"), &filter_out, &plugins_dir, &mut build, 0);
 
     build.compile("cardinal_plugin_mindmeldmodular");
 }
