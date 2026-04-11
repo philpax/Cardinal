@@ -2,6 +2,7 @@
 members = [
     "crates/cardinal-core",
     "crates/cardinal-egui",
+    "crates/cardinal-plugin-aaronstatic",
     "crates/cardinal-plugin-admiral",
     "crates/cardinal-plugin-alefsbits",
     "crates/cardinal-plugin-algoritmarte",
