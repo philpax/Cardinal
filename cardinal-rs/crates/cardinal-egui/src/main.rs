@@ -2,8 +2,21 @@ use cardinal_core::{self as cc, CableId, ModuleId};
 use eframe::egui;
 
 fn main() -> eframe::Result {
+    // Query the host audio sample rate before initialising the engine
+    let sample_rate = cpal_sample_rate().unwrap_or(48000.0);
+    eprintln!("Audio sample rate: {sample_rate} Hz");
+
     let resource_dir = cc::default_resource_dir();
-    cc::init(48000.0, &resource_dir);
+    cc::init(sample_rate, &resource_dir);
+
+    // Create the audio I/O terminal module
+    let audio_id = cc::audio_create();
+    if audio_id.is_none() {
+        eprintln!("Warning: failed to create audio I/O module");
+    }
+
+    // Start the real-time audio thread
+    let _audio_stream = start_audio_stream();
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -17,6 +30,83 @@ fn main() -> eframe::Result {
         options,
         Box::new(|_cc| Ok(Box::new(App::new()))),
     )
+}
+
+// ── Audio backend (cpal) ─────────────────────────────────────────────
+
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+
+fn cpal_sample_rate() -> Option<f32> {
+    let host = cpal::default_host();
+    let device = host.default_output_device()?;
+    let config = device.default_output_config().ok()?;
+    Some(config.sample_rate().0 as f32)
+}
+
+fn start_audio_stream() -> Option<cpal::Stream> {
+    let host = cpal::default_host();
+    let device = host.default_output_device()?;
+    let config = device.default_output_config().ok()?;
+
+    eprintln!(
+        "Audio device: {}, config: {:?}",
+        device.name().unwrap_or_default(),
+        config
+    );
+
+    let channels = config.channels() as usize;
+    let sample_rate = config.sample_rate().0;
+
+    let stream = match config.sample_format() {
+        cpal::SampleFormat::F32 => {
+            device.build_output_stream(
+                &cpal::StreamConfig {
+                    channels: channels as u16,
+                    sample_rate: cpal::SampleRate(sample_rate),
+                    buffer_size: cpal::BufferSize::Default,
+                },
+                move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                    audio_callback(data, channels);
+                },
+                |err| eprintln!("Audio stream error: {err}"),
+                None,
+            ).ok()?
+        }
+        _ => {
+            eprintln!("Unsupported sample format: {:?}", config.sample_format());
+            return None;
+        }
+    };
+
+    stream.play().ok()?;
+    eprintln!("Audio stream started");
+    Some(stream)
+}
+
+fn audio_callback(output: &mut [f32], channels: usize) {
+    let frames = output.len() / channels;
+
+    // Stack buffer to avoid allocation in the audio thread.
+    // Max 8192 frames (from AUDIO_IO_MAX_FRAMES in bridge.cpp).
+    const MAX: usize = 8192;
+    let frames = frames.min(MAX);
+    let mut stereo_buf = [0.0f32; MAX * 2];
+
+    // Process through the Rack engine
+    cc::audio_process(frames, None, &mut stereo_buf[..frames * 2]);
+
+    // Write to output buffer (may be more than 2 channels)
+    for i in 0..frames {
+        let l = stereo_buf[i * 2];
+        let r = stereo_buf[i * 2 + 1];
+        let base = i * channels;
+        if channels >= 1 { output[base] = l; }
+        if channels >= 2 { output[base + 1] = r; }
+        for ch in 2..channels { output[base + ch] = 0.0; }
+    }
+    // Zero any remaining frames if output is longer
+    let written = frames * channels;
+    for s in &mut output[written..] { *s = 0.0; }
 }
 
 struct PlacedModule {
@@ -103,7 +193,8 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        cc::process(256);
+        // Audio processing is driven by the cpal audio thread
+        // via cardinal_audio_process(), not here.
 
         // ── Side panel ───────────────────────────────────────────────
         egui::SidePanel::left("browser").min_width(180.0).show(ctx, |ui| {

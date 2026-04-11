@@ -33,6 +33,9 @@ pkgs.mkShell {
     xorg.libXi
     xorg.libXinerama
 
+    # Audio (cpal backend)
+    alsa-lib
+
     # Wayland (alternative backend)
     wayland
     libxkbcommon

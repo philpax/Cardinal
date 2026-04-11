@@ -80,6 +80,20 @@ CableHandle cardinal_cable_create(
     ModuleHandle in_module,  int in_port);
 void cardinal_cable_destroy(CableHandle h);
 
+// ── Audio I/O ────────────────────────────────────────────────────────
+/// Create a stereo audio I/O terminal module.
+/// This module has 2 input ports (for audio going to speakers) and
+/// 2 output ports (for audio coming from a mic/file).
+/// Returns module handle or -1 on error.
+ModuleHandle cardinal_audio_create(void);
+
+/// Process `frames` audio samples and write interleaved stereo output
+/// (from Rack) into `output_buf`. The buffer must hold frames*2 floats.
+/// Samples are in [-1, 1] range.
+/// If `input_buf` is non-NULL, it provides interleaved stereo input
+/// (into Rack) for the same block.
+void cardinal_audio_process(int frames, const float* input_buf, float* output_buf);
+
 // ── Engine stepping ──────────────────────────────────────────────────
 void cardinal_process(int frames);
 float cardinal_get_sample_rate(void);

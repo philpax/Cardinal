@@ -85,6 +85,9 @@ unsafe extern "C" {
         out_width: *mut i32, out_height: *mut i32,
     ) -> i32;
 
+    pub fn cardinal_audio_create() -> i64;
+    pub fn cardinal_audio_process(frames: i32, input_buf: *const f32, output_buf: *mut f32);
+
     pub fn cardinal_process(frames: i32);
     pub fn cardinal_get_sample_rate() -> f32;
 }

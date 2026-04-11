@@ -200,6 +200,31 @@ pub fn module_render(id: ModuleId, max_width: i32, max_height: i32) -> Option<(i
     }
 }
 
+// ── Audio I/O ────────────────────────────────────────────────────────
+
+/// Create the audio I/O terminal module.
+/// This is a stereo module with 2 inputs (patch→speakers) and 2 outputs (mic→patch).
+/// Only one can exist at a time.
+pub fn audio_create() -> Option<ModuleId> {
+    let h = unsafe { ffi::cardinal_audio_create() };
+    if h < 0 { None } else { Some(ModuleId(h)) }
+}
+
+/// Process `frames` audio samples through the engine.
+/// Writes interleaved stereo output (from the patch) into `output`.
+/// If `input` is provided, it feeds interleaved stereo audio into the patch.
+/// Samples are in [-1, 1] range.
+pub fn audio_process(frames: usize, input: Option<&[f32]>, output: &mut [f32]) {
+    assert!(output.len() >= frames * 2);
+    if let Some(inp) = input {
+        assert!(inp.len() >= frames * 2);
+    }
+    let inp_ptr = input.map_or(std::ptr::null(), |s| s.as_ptr());
+    unsafe {
+        ffi::cardinal_audio_process(frames as i32, inp_ptr, output.as_mut_ptr());
+    }
+}
+
 /// Connect an output port to an input port.
 pub fn cable_create(
     out_module: ModuleId, out_port: i32,

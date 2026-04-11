@@ -7,3 +7,4 @@ edition = "2024"
 cardinal-core = { path = "../cardinal-core" }
 eframe = { version = "0.31", default-features = false, features = ["glow", "default_fonts", "x11"] }
 egui = "0.31"
+cpal = "0.15"

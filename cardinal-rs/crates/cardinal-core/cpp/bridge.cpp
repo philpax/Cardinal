@@ -11,6 +11,7 @@
 #include <engine/Engine.hpp>
 #include <engine/Module.hpp>
 #include <engine/Cable.hpp>
+#include <engine/TerminalModule.hpp>
 #include <app/ModuleWidget.hpp>
 #include <app/CableWidget.hpp>
 #include <app/RackWidget.hpp>
@@ -31,8 +32,68 @@
 #include <EGL/egl.h>
 #include <GL/gl.h>
 
-// Forward declarations for plugin init
+// Forward declarations
 namespace rack { namespace plugin { void initStaticPlugins(); } }
+extern std::vector<rack::plugin::Model*> hostTerminalModels;
+
+// ── AudioIO terminal module ──────────────────────────────────────────
+// Bridges between the Rack engine and external audio (via the Rust side).
+// 2 inputs (Rack→speakers), 2 outputs (mic→Rack).
+
+static constexpr int AUDIO_IO_MAX_FRAMES = 8192;
+
+struct AudioIOModule : rack::engine::TerminalModule {
+    // Double-buffered: Rust writes input here, reads output from here.
+    // Protected by the engine mutex (process is single-threaded).
+    float inputBuf[AUDIO_IO_MAX_FRAMES * 2] = {};   // interleaved stereo, mic→Rack
+    float outputBuf[AUDIO_IO_MAX_FRAMES * 2] = {};   // interleaved stereo, Rack→speakers
+    int frameIndex = 0;
+
+    AudioIOModule() {
+        config(0, 2, 2, 0);
+        configInput(0, "Left from speakers");
+        configInput(1, "Right from speakers");
+        configOutput(0, "Left from input");
+        configOutput(1, "Right from input");
+    }
+
+    // Runs BEFORE all other modules — provide audio input to the patch
+    void processTerminalInput(const rack::engine::Module::ProcessArgs&) override {
+        int k = frameIndex;
+        if (k < AUDIO_IO_MAX_FRAMES) {
+            outputs[0].setVoltage(inputBuf[k * 2 + 0] * 10.f);
+            outputs[1].setVoltage(inputBuf[k * 2 + 1] * 10.f);
+        }
+    }
+
+    // Runs AFTER all other modules — capture audio output from the patch
+    void processTerminalOutput(const rack::engine::Module::ProcessArgs&) override {
+        int k = frameIndex;
+        if (k < AUDIO_IO_MAX_FRAMES) {
+            float l = inputs[0].getVoltageSum() * 0.1f;
+            float r = inputs[1].getVoltageSum() * 0.1f;
+            // Clamp to [-1, 1]
+            outputBuf[k * 2 + 0] = std::max(-1.f, std::min(1.f, l));
+            outputBuf[k * 2 + 1] = std::max(-1.f, std::min(1.f, r));
+        }
+        frameIndex++;
+    }
+};
+
+// Model for AudioIO (needed so the engine recognises it as a terminal module)
+struct AudioIOModel : rack::plugin::Model {
+    rack::engine::Module* createModule() override {
+        auto* m = new AudioIOModule();
+        m->model = this;
+        return m;
+    }
+    rack::app::ModuleWidget* createModuleWidget(rack::engine::Module*) override {
+        return nullptr;  // No widget — this is a bridge module
+    }
+};
+
+static AudioIOModel g_audioIOModel;
+static AudioIOModule* g_audioIO = nullptr;
 
 // ── Internal state ───────────────────────────────────────────────────
 
@@ -556,6 +617,54 @@ void cardinal_cable_destroy(CableHandle h) {
     g_engine->removeCable(it->second);
     delete it->second;
     g_cables.erase(it);
+}
+
+// ── Audio I/O ────────────────────────────────────────────────────────
+
+ModuleHandle cardinal_audio_create(void) {
+    if (!g_engine || g_audioIO) return -1;  // only one audio module
+
+    g_audioIOModel.slug = "AudioIO";
+    g_audioIOModel.name = "Audio I/O";
+
+    // Register as a terminal model so the engine processes it
+    // before/after all other modules
+    hostTerminalModels.push_back(&g_audioIOModel);
+
+    auto* module = new AudioIOModule();
+    module->model = &g_audioIOModel;
+    g_engine->addModule(module);
+    g_audioIO = module;
+
+    int64_t handle = module->id;
+    g_modules[handle] = { module, nullptr, &g_audioIOModel };
+    return handle;
+}
+
+void cardinal_audio_process(int frames, const float* input_buf, float* output_buf) {
+    if (!g_engine || !g_audioIO) {
+        if (output_buf) memset(output_buf, 0, frames * 2 * sizeof(float));
+        return;
+    }
+
+    if (frames > AUDIO_IO_MAX_FRAMES)
+        frames = AUDIO_IO_MAX_FRAMES;
+
+    // Copy input audio into the terminal module's buffer
+    if (input_buf) {
+        memcpy(g_audioIO->inputBuf, input_buf, frames * 2 * sizeof(float));
+    } else {
+        memset(g_audioIO->inputBuf, 0, frames * 2 * sizeof(float));
+    }
+
+    // Reset frame counter and process
+    g_audioIO->frameIndex = 0;
+    g_engine->stepBlock(frames);
+
+    // Copy output audio from the terminal module's buffer
+    if (output_buf) {
+        memcpy(output_buf, g_audioIO->outputBuf, frames * 2 * sizeof(float));
+    }
 }
 
 // ── Engine stepping ──────────────────────────────────────────────────
