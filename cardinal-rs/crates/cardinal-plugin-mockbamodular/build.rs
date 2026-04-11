@@ -70,7 +70,7 @@ fn main() {
     build.define("ComparatorWidget", "MockbaModularComparatorWidget");
 
     // Filter-out list
-    let filter_out: Vec<String> = vec![
+    let _filter_out: Vec<String> = vec![
         "MockbaModular/src/plugin.cpp".to_string(),
         "MockbaModular/src/MockbaModular.cpp".to_string(),
         "MockbaModular/src/UDPClockMaster.cpp".to_string(),
@@ -79,15 +79,30 @@ fn main() {
 
     // Source files
 
-    // Recursively collect source files
+    // Recursively collect source files, skipping test/template dirs
+    #[allow(dead_code)]
     fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
         if depth > 5 || !dir.exists() { return; }
+        // Skip directories that contain test/template/example files
+        if let Some(name) = dir.file_name().and_then(|n| n.to_str()) {
+            let lower = name.to_lowercase();
+            if lower == "test" || lower == "tests" || lower == "template"
+                || lower == "templates" || lower == "examples" || lower == "doc"
+                || lower == "docs" || lower == "benchmark" || lower == "benchmarks" {
+                return;
+            }
+        }
         if let Ok(entries) = std::fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_dir() {
                     collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
                 } else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {
+                    // Skip test files by name
+                    let fname = path.file_name().unwrap_or_default().to_str().unwrap_or("");
+                    if fname.contains("_test") || fname.contains("test_") || fname == "main.cpp" || fname == "main.c" {
+                        continue;
+                    }
                     let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
                     if !filter_out.contains(&rel) {
                         build.file(&path);
@@ -96,7 +111,7 @@ fn main() {
             }
         }
     }
-    collect_sources(&plugins_dir.join("MockbaModular/src"), &filter_out, &plugins_dir, &mut build, 0);
+    collect_sources(&plugins_dir.join("MockbaModular/src"), &_filter_out, &plugins_dir, &mut build, 0);
 
     build.compile("cardinal_plugin_mockbamodular");
 }

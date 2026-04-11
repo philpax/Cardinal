@@ -1,7 +1,6 @@
 // Auto-generated: references all plugin vendor crates to ensure they're linked.
 extern crate cardinal_plugin_aaronstatic;
 extern crate cardinal_plugin_admiral;
-extern crate cardinal_plugin_alefsbits;
 extern crate cardinal_plugin_algoritmarte;
 extern crate cardinal_plugin_amalgamatedharmonics;
 extern crate cardinal_plugin_animatedcircuits;
@@ -67,7 +66,6 @@ extern crate cardinal_plugin_sonusmodular;
 extern crate cardinal_plugin_stocaudio;
 extern crate cardinal_plugin_stoermelder_packone;
 extern crate cardinal_plugin_unless_modules;
-extern crate cardinal_plugin_valleyaudio;
 extern crate cardinal_plugin_venom;
 extern crate cardinal_plugin_whattherack;
 extern crate cardinal_plugin_wstd_drums;

@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 cardinal-plugin-aaronstatic = { path = "../cardinal-plugin-aaronstatic" }
 cardinal-plugin-admiral = { path = "../cardinal-plugin-admiral" }
-cardinal-plugin-alefsbits = { path = "../cardinal-plugin-alefsbits" }
 cardinal-plugin-algoritmarte = { path = "../cardinal-plugin-algoritmarte" }
 cardinal-plugin-amalgamatedharmonics = { path = "../cardinal-plugin-amalgamatedharmonics" }
 cardinal-plugin-animatedcircuits = { path = "../cardinal-plugin-animatedcircuits" }
@@ -72,7 +71,6 @@ cardinal-plugin-sonusmodular = { path = "../cardinal-plugin-sonusmodular" }
 cardinal-plugin-stocaudio = { path = "../cardinal-plugin-stocaudio" }
 cardinal-plugin-stoermelder-packone = { path = "../cardinal-plugin-stoermelder-packone" }
 cardinal-plugin-unless-modules = { path = "../cardinal-plugin-unless-modules" }
-cardinal-plugin-valleyaudio = { path = "../cardinal-plugin-valleyaudio" }
 cardinal-plugin-venom = { path = "../cardinal-plugin-venom" }
 cardinal-plugin-whattherack = { path = "../cardinal-plugin-whattherack" }
 cardinal-plugin-wstd-drums = { path = "../cardinal-plugin-wstd-drums" }

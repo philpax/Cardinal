@@ -43,6 +43,8 @@ SKIP_PLUGINS = {
     "BogaudioModules-helper", # Needs BogaudioModules cross-crate includes
     "surgext-helper",        # Needs surgext cross-crate includes
     "DHE-Modules",           # Non-standard source layout
+    "ValleyAudio",           # SIMDE SSE3 redefinition conflict
+    "alefsbits",             # GCC 14 incompatible (begin/end on C arrays)
 }
 
 def parse_drwav_list(makefile_text):
@@ -261,15 +263,30 @@ cc = "1"
     # Source collection — define helper once, call per directory
     source_code_parts = []
     source_code_parts.append("""
-    // Recursively collect source files
+    // Recursively collect source files, skipping test/template dirs
+    #[allow(dead_code)]
     fn collect_sources(dir: &std::path::Path, filter_out: &[String], plugins_dir: &std::path::Path, build: &mut cc::Build, depth: u32) {
         if depth > 5 || !dir.exists() { return; }
+        // Skip directories that contain test/template/example files
+        if let Some(name) = dir.file_name().and_then(|n| n.to_str()) {
+            let lower = name.to_lowercase();
+            if lower == "test" || lower == "tests" || lower == "template"
+                || lower == "templates" || lower == "examples" || lower == "doc"
+                || lower == "docs" || lower == "benchmark" || lower == "benchmarks" {
+                return;
+            }
+        }
         if let Ok(entries) = std::fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_dir() {
                     collect_sources(&path, filter_out, plugins_dir, build, depth + 1);
                 } else if path.extension().map_or(false, |e| e == "cpp" || e == "cc" || e == "c") {
+                    // Skip test files by name
+                    let fname = path.file_name().unwrap_or_default().to_str().unwrap_or("");
+                    if fname.contains("_test") || fname.contains("test_") || fname == "main.cpp" || fname == "main.c" {
+                        continue;
+                    }
                     let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
                     if !filter_out.contains(&rel) {
                         build.file(&path);
@@ -280,12 +297,14 @@ cc = "1"
     }""")
 
     for sd in source_dirs:
-        source_code_parts.append(f'    collect_sources(&plugins_dir.join("{sd}"), &filter_out, &plugins_dir, &mut build, 0);')
+        source_code_parts.append(f'    collect_sources(&plugins_dir.join("{sd}"), &_filter_out, &plugins_dir, &mut build, 0);')
 
     for ef in explicit_files:
         source_code_parts.append(f'    build.file(plugins_dir.join("{ef}"));')
 
     filter_out_code = "\n".join(f'        "{f}".to_string(),' for f in filter_out)
+    # Use underscore prefix if filter_out is unused (no source dirs to glob)
+    filter_out_var = "_filter_out" if not source_dirs else "filter_out"
 
     build_rs = f"""use std::path::PathBuf;
 
@@ -351,7 +370,7 @@ fn main() {{
     // Symbol renames to avoid cross-plugin collisions
 {defines_code}
     // Filter-out list
-    let filter_out: Vec<String> = vec![
+    let _filter_out: Vec<String> = vec![
 {filter_out_code}
     ];
 

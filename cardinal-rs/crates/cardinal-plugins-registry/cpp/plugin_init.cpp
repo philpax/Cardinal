@@ -109,14 +109,12 @@ extern rack::plugin::Plugin* pluginInstance__PinkTrombone;
 extern rack::plugin::Plugin* pluginInstance__Prism;
 extern rack::plugin::Plugin* pluginInstance__RebelTech;
 extern rack::plugin::Plugin* pluginInstance__sapphire;
-extern rack::plugin::Plugin* pluginInstance__ValleyAudio;
 extern rack::plugin::Plugin* pluginInstance__Venom;
 extern rack::plugin::Plugin* pluginInstance__WSTD_Drums;
 extern rack::plugin::Plugin* pluginInstance__WhatTheRack;
 extern rack::plugin::Plugin* pluginInstance__ZZC;
 extern rack::plugin::Plugin* pluginInstance__ZetaCarinaeModules;
 extern rack::plugin::Plugin* pluginInstance__admiral;
-extern rack::plugin::Plugin* pluginInstance__alefsbits;
 extern rack::plugin::Plugin* pluginInstance__cf;
 extern rack::plugin::Plugin* pluginInstance__dBiz;
 extern rack::plugin::Plugin* pluginInstance__eightfold;
@@ -182,14 +180,12 @@ extern "C++" void init__PinkTrombone(rack::plugin::Plugin*);
 extern "C++" void init__Prism(rack::plugin::Plugin*);
 extern "C++" void init__RebelTech(rack::plugin::Plugin*);
 extern "C++" void init__sapphire(rack::plugin::Plugin*);
-extern "C++" void init__ValleyAudio(rack::plugin::Plugin*);
 extern "C++" void init__Venom(rack::plugin::Plugin*);
 extern "C++" void init__WSTD_Drums(rack::plugin::Plugin*);
 extern "C++" void init__WhatTheRack(rack::plugin::Plugin*);
 extern "C++" void init__ZZC(rack::plugin::Plugin*);
 extern "C++" void init__ZetaCarinaeModules(rack::plugin::Plugin*);
 extern "C++" void init__admiral(rack::plugin::Plugin*);
-extern "C++" void init__alefsbits(rack::plugin::Plugin*);
 extern "C++" void init__cf(rack::plugin::Plugin*);
 extern "C++" void init__dBiz(rack::plugin::Plugin*);
 extern "C++" void init__eightfold(rack::plugin::Plugin*);
@@ -502,12 +498,6 @@ void initStaticPlugins() {
     }
     {
         Plugin* const p = new Plugin;
-        pluginInstance__ValleyAudio = p;
-        const StaticPluginLoader spl(p, "ValleyAudio");
-        if (spl.ok()) init__ValleyAudio(p);
-    }
-    {
-        Plugin* const p = new Plugin;
         pluginInstance__Venom = p;
         const StaticPluginLoader spl(p, "Venom");
         if (spl.ok()) init__Venom(p);
@@ -541,12 +531,6 @@ void initStaticPlugins() {
         pluginInstance__admiral = p;
         const StaticPluginLoader spl(p, "admiral");
         if (spl.ok()) init__admiral(p);
-    }
-    {
-        Plugin* const p = new Plugin;
-        pluginInstance__alefsbits = p;
-        const StaticPluginLoader spl(p, "alefsbits");
-        if (spl.ok()) init__alefsbits(p);
     }
     {
         Plugin* const p = new Plugin;
