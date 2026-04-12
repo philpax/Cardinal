@@ -120,6 +120,8 @@ static std::unordered_map<int64_t, rack::engine::Cable*> g_cables;
 
 // ── EGL offscreen context ────────────────────────────────────────────
 
+static void shutdownEGL();
+
 static bool initEGL() {
     g_eglDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (g_eglDisplay == EGL_NO_DISPLAY) {
@@ -173,7 +175,20 @@ static bool initEGL() {
         return false;
     }
 
-    eglMakeCurrent(g_eglDisplay, g_eglSurface, g_eglSurface, g_eglContext);
+    if (!eglMakeCurrent(g_eglDisplay, g_eglSurface, g_eglSurface, g_eglContext)) {
+        fprintf(stderr, "cardinal: eglMakeCurrent failed\n");
+        return false;
+    }
+
+    // Verify the GL context is actually functional
+    const char* glVersion = (const char*)glGetString(GL_VERSION);
+    if (!glVersion) {
+        fprintf(stderr, "cardinal: GL context broken (glGetString returned null)\n");
+        shutdownEGL();
+        return false;
+    }
+    fprintf(stderr, "cardinal: EGL/GL initialized — %s\n", glVersion);
+
     return true;
 }
 
@@ -252,13 +267,17 @@ int cardinal_init(float sample_rate, const char* resource_dir) {
     g_context->engine = g_engine;
     g_engine->setSampleRate(sample_rate);
 
-    // Set up Window with our NanoVG context
-    // The Window object normally owns the GL context; we give it ours.
+    // Create a Window so APP->window is never null.
+    // Plugin code (Font::load, Image::load, Svg::load) accesses APP->window.
+    auto* window = new rack::window::Window();
+    g_context->window = window;
+
     if (!rack::settings::headless) {
-        // We'll set the vg pointers directly — the Window stubs
-        // won't create their own context.
-        // Note: this relies on our custom Window initialization in stubs.cpp
+        // Wire our NanoVG contexts into the Window
+        window->vg = g_vg;
+        window->fbVg = g_fbVg;
     }
+    // If headless, window->vg stays null; loadFont/loadImage will return nullptr.
 
     // Plugin registration is deferred to Rust side
     // (cardinal_plugins_registry::register_all_plugins() called from cardinal_core::init())
@@ -283,6 +302,14 @@ void cardinal_shutdown(void) {
     }
     g_modules.clear();
     g_cables.clear();
+
+    // Detach NanoVG from Window before destroying them
+    if (g_context && g_context->window) {
+        g_context->window->vg = nullptr;
+        g_context->window->fbVg = nullptr;
+        delete g_context->window;
+        g_context->window = nullptr;
+    }
 
     if (g_fbVg) { nvgDeleteGL2(g_fbVg); g_fbVg = nullptr; }
     if (g_vg) { nvgDeleteGL2(g_vg); g_vg = nullptr; }

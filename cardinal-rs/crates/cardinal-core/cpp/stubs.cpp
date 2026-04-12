@@ -49,6 +49,8 @@ double Window::getLastFrameDuration() { return 1.0 / 60.0; }
 double Window::getFrameDurationRemaining() { return 1.0 / 60.0; }
 
 std::shared_ptr<Font> Window::loadFont(const std::string& filename) {
+    if (!vg) return nullptr;  // headless — no NanoVG context
+
     auto& cache = internal->fontCache;
     auto it = cache.find(filename);
     if (it != cache.end())
@@ -66,6 +68,8 @@ std::shared_ptr<Font> Window::loadFont(const std::string& filename) {
 }
 
 std::shared_ptr<Image> Window::loadImage(const std::string& filename) {
+    if (!vg) return nullptr;  // headless — no NanoVG context
+
     auto& cache = internal->imageCache;
     auto it = cache.find(filename);
     if (it != cache.end())
