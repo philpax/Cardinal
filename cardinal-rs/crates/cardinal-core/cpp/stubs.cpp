@@ -266,8 +266,19 @@ osdialog_filters* osdialog_filters_parse(const char*) { return nullptr; }
 void osdialog_filters_free(osdialog_filters*) {}
 
 // ── Plugin registry ─────────────────────────────────────────────────
-// ── Null stubs for model pointers missing from current submodule revisions ──
+// Override Plugin::addModel with a null-safe version.
+// Some model pointers are null stubs (their source files aren't compiled),
+// and the original addModel does assert(!model->plugin) which crashes on null.
 #include <plugin/Model.hpp>
+namespace rack { namespace plugin {
+void Plugin::addModel(Model* model) {
+    if (!model) return;  // Skip null model stubs
+    model->plugin = this;
+    models.push_back(model);
+}
+}}
+
+// Null stubs for model pointers whose source files aren't compiled
 rack::plugin::Model* modelViz = nullptr;
 rack::plugin::Model* modelUnity = nullptr;
 rack::plugin::Model* modelMidiThing = nullptr;  // Befaco (needs MIDI hw)
