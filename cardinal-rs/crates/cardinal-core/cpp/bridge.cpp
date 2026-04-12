@@ -468,6 +468,14 @@ CableHandle cardinal_cable_create(
     auto in_it = g_modules.find(in_module);
     if (out_it == g_modules.end() || in_it == g_modules.end()) return -1;
 
+    // Check if the input port already has a cable (Rack asserts this)
+    for (auto& [_, existing] : g_cables) {
+        if (existing->inputModule == in_it->second.module &&
+            existing->inputId == in_port) {
+            return -1;  // input already connected
+        }
+    }
+
     auto* cable = new rack::engine::Cable();
     cable->outputModule = out_it->second.module;
     cable->outputId = out_port;

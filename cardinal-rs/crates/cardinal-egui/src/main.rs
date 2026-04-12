@@ -752,18 +752,18 @@ impl App {
                         egui::FontId::proportional(11.0),
                         egui::Color32::GRAY,
                     );
-                    // Draw port indicators
+                    // Draw port indicators with short labels
                     for p in &m.inputs {
                         let pos = Self::port_world_pos(m, p);
                         painter.circle_filled(pos, 6.0, egui::Color32::from_rgb(60, 120, 200));
                         painter.text(pos + egui::vec2(10.0, 0.0), egui::Align2::LEFT_CENTER,
-                            &p.name, egui::FontId::proportional(9.0), egui::Color32::LIGHT_GRAY);
+                            format!("in {}", p.id), egui::FontId::proportional(9.0), egui::Color32::LIGHT_GRAY);
                     }
                     for p in &m.outputs {
                         let pos = Self::port_world_pos(m, p);
                         painter.circle_filled(pos, 6.0, egui::Color32::from_rgb(200, 120, 60));
                         painter.text(pos + egui::vec2(-10.0, 0.0), egui::Align2::RIGHT_CENTER,
-                            &p.name, egui::FontId::proportional(9.0), egui::Color32::LIGHT_GRAY);
+                            format!("out {}", p.id), egui::FontId::proportional(9.0), egui::Color32::LIGHT_GRAY);
                     }
                 }
             }
