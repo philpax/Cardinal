@@ -120,5 +120,6 @@ fn main() {
     // Init wrapper (renames init() only for the plugin registration file)
     build.file(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("register.cpp"));
 
+    println!("cargo:rerun-if-changed=register.cpp");
     build.compile("cardinal_plugin_wstd_drums");
 }

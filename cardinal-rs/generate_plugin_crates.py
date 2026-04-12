@@ -532,6 +532,7 @@ fn main() {{
 
     // Init wrapper (renames init() only for the plugin registration file)
 {init_wrapper_code}
+    println!("cargo:rerun-if-changed=register.cpp");
     build.compile("{crate_name.replace('-', '_')}");
 }}
 """
