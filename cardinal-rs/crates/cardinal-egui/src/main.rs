@@ -339,7 +339,6 @@ impl eframe::App for App {
         // ── Central panel: Rack ──────────────────────────────────────
         egui::CentralPanel::default().show(ctx, |ui| {
             let rect = ui.max_rect();
-            let pointer = ui.input(|i| i.pointer.interact_pos());
 
             // Allocate rects for each module
             let mut responses: Vec<(usize, egui::Response)> = Vec::new();
@@ -544,11 +543,10 @@ impl eframe::App for App {
                 }
             }
 
-            // Draw modules
+            // Draw modules — use Cardinal's rendered widget texture
             for m in &self.modules {
                 let mr = egui::Rect::from_min_size(m.pos, m.size);
 
-                // Draw rendered widget texture if available
                 if let Some(tex) = &m.texture {
                     painter.image(
                         tex.id(),
@@ -557,72 +555,15 @@ impl eframe::App for App {
                         egui::Color32::WHITE,
                     );
                 } else {
-                    // Fallback: draw schematic rectangle
-                    painter.rect_filled(mr, 4.0, egui::Color32::from_rgb(50, 52, 58));
-                    painter.rect_stroke(
-                        mr,
-                        4.0,
-                        egui::Stroke::new(1.0, egui::Color32::from_rgb(80, 82, 88)),
-                        egui::StrokeKind::Outside,
-                    );
+                    // Fallback until first render completes
+                    painter.rect_filled(mr, 0.0, egui::Color32::from_rgb(40, 42, 48));
                     painter.text(
                         m.pos + egui::vec2(m.size.x / 2.0, m.size.y / 2.0),
                         egui::Align2::CENTER_CENTER,
                         &m.name,
                         egui::FontId::proportional(11.0),
-                        egui::Color32::WHITE,
+                        egui::Color32::GRAY,
                     );
-                }
-
-                // Draw port highlights on hover
-                if let Some(ptr) = pointer {
-                    for port in &m.inputs {
-                        let pp = Self::port_world_pos(m, port);
-                        if pp.distance(ptr) < 14.0 {
-                            painter.circle_stroke(
-                                pp,
-                                10.0,
-                                egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 160, 255)),
-                            );
-                            painter.text(
-                                pp + egui::vec2(0.0, -14.0),
-                                egui::Align2::CENTER_BOTTOM,
-                                format!("IN: {}", port.name),
-                                egui::FontId::proportional(10.0),
-                                egui::Color32::from_rgb(150, 200, 255),
-                            );
-                        }
-                    }
-                    for port in &m.outputs {
-                        let pp = Self::port_world_pos(m, port);
-                        if pp.distance(ptr) < 14.0 {
-                            painter.circle_stroke(
-                                pp,
-                                10.0,
-                                egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 160, 80)),
-                            );
-                            painter.text(
-                                pp + egui::vec2(0.0, -14.0),
-                                egui::Align2::CENTER_BOTTOM,
-                                format!("OUT: {}", port.name),
-                                egui::FontId::proportional(10.0),
-                                egui::Color32::from_rgb(255, 200, 150),
-                            );
-                        }
-                    }
-                    for param in &m.params {
-                        let pp = m.pos + egui::vec2(param.x, param.y);
-                        if pp.distance(ptr) < 16.0 {
-                            let val = cc::module_get_param(m.id, param.id);
-                            painter.text(
-                                pp + egui::vec2(0.0, -18.0),
-                                egui::Align2::CENTER_BOTTOM,
-                                format!("{}: {:.2}", param.name, val),
-                                egui::FontId::proportional(10.0),
-                                egui::Color32::from_rgb(200, 255, 200),
-                            );
-                        }
-                    }
                 }
             }
         });

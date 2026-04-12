@@ -600,14 +600,27 @@ int cardinal_module_render(ModuleHandle h,
     *out_width = w;
     *out_height = h2;
 
+    // Save the caller's GL context (eframe/glutin) so we can restore it after
+    EGLDisplay prevDisplay = eglGetCurrentDisplay();
+    EGLSurface prevDrawSurface = eglGetCurrentSurface(EGL_DRAW);
+    EGLSurface prevReadSurface = eglGetCurrentSurface(EGL_READ);
+    EGLContext prevContext = eglGetCurrentContext();
+
     // Activate our EGL context for NanoVG rendering
-    if (g_eglDisplay != EGL_NO_DISPLAY) {
-        eglMakeCurrent(g_eglDisplay, g_eglSurface, g_eglSurface, g_eglContext);
+    if (!eglMakeCurrent(g_eglDisplay, g_eglSurface, g_eglSurface, g_eglContext)) {
+        fprintf(stderr, "cardinal: render: eglMakeCurrent failed\n");
+        return 0;
     }
 
     // Create FBO
     NVGLUframebuffer* fbo = nvgluCreateFramebuffer(g_vg, w, h2, 0);
-    if (!fbo) return 0;
+    if (!fbo) {
+        fprintf(stderr, "cardinal: render: FBO creation failed (%dx%d)\n", w, h2);
+        // Restore caller's context
+        if (prevDisplay != EGL_NO_DISPLAY)
+            eglMakeCurrent(prevDisplay, prevDrawSurface, prevReadSurface, prevContext);
+        return 0;
+    }
 
     nvgluBindFramebuffer(fbo);
     glViewport(0, 0, w, h2);
@@ -647,8 +660,10 @@ int cardinal_module_render(ModuleHandle h,
         memcpy(bot, row.data(), stride);
     }
 
-    // Release EGL context so eframe's GL context can be active
-    if (g_eglDisplay != EGL_NO_DISPLAY) {
+    // Restore the caller's GL context (eframe/glutin)
+    if (prevDisplay != EGL_NO_DISPLAY) {
+        eglMakeCurrent(prevDisplay, prevDrawSurface, prevReadSurface, prevContext);
+    } else {
         eglMakeCurrent(g_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     }
 
