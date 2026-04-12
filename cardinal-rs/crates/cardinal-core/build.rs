@@ -62,7 +62,10 @@ fn main() {
     }
 
     // ── Rerun triggers ───────────────────────────────────────────────
-    for f in &["bridge.h", "bridge.cpp", "stubs.cpp", "plugin_init.cpp"] {
+    // Only re-run this build script when our own files change.
+    // The Rack engine sources are vendored and don't change during dev.
+    println!("cargo:rerun-if-changed=build.rs");
+    for f in &["bridge.h", "bridge.cpp", "stubs.cpp", "nanosvg_impl.cpp"] {
         println!("cargo:rerun-if-changed=cpp/{f}");
     }
 }
