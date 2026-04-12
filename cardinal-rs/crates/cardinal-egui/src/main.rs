@@ -51,9 +51,11 @@ struct ModuleInfo {
 
 struct RenderResult {
     module_id: ModuleId,
-    width: i32,
-    height: i32,
-    pixels: Vec<u8>,
+    #[allow(dead_code)]
+    width: u32,
+    #[allow(dead_code)]
+    height: u32,
+    texture: wgpu::Texture,
 }
 
 // ── Cardinal thread ─────────────────────────────────────────────────
@@ -73,6 +75,8 @@ fn spawn_cardinal_thread(
 
             #[allow(unused_assignments)]
             let mut nanovg_ctx: *mut cardinal_core::ffi::NVGcontext = std::ptr::null_mut();
+            let mut gpu_device: Option<Arc<wgpu::Device>> = None;
+            let mut _gpu_queue: Option<Arc<wgpu::Queue>> = None;
 
             eprintln!("cardinal thread: ready");
 
@@ -120,14 +124,36 @@ fn spawn_cardinal_thread(
                         width,
                         height,
                     } => {
-                        if let Some((w, h, pixels)) = cc::module_render(module_id, width, height) {
-                            let _ = render_tx.send(RenderResult {
-                                module_id,
-                                width: w,
-                                height: h,
-                                pixels,
-                            });
-                        }
+                        if nanovg_ctx.is_null() { continue; }
+                        let device = gpu_device.as_ref().unwrap();
+                        let w = width as u32;
+                        let h = height as u32;
+
+                        // Create render target texture
+                        let texture = device.create_texture(&wgpu::TextureDescriptor {
+                            label: Some("nvg_render_target"),
+                            size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                            mip_level_count: 1,
+                            sample_count: 1,
+                            dimension: wgpu::TextureDimension::D2,
+                            format: wgpu::TextureFormat::Rgba8Unorm,
+                            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                            view_formats: &[],
+                        });
+                        let view = texture.create_view(&Default::default());
+
+                        // Set render target and render
+                        cardinal_core::nanovg_wgpu::set_render_target(nanovg_ctx, view, w, h);
+                        unsafe { cardinal_core::ffi::nvgBeginFrame(nanovg_ctx, w as f32, h as f32, 1.0) };
+                        cc::module_render(module_id, nanovg_ctx, w as i32, h as i32);
+                        unsafe { cardinal_core::ffi::nvgEndFrame(nanovg_ctx) };
+
+                        let _ = render_tx.send(RenderResult {
+                            module_id,
+                            width: w,
+                            height: h,
+                            texture,
+                        });
                     }
                     Command::CreateAudio => {
                         cc::audio_create();
@@ -136,10 +162,13 @@ fn spawn_cardinal_thread(
                         let _ = reply.send(cc::catalog());
                     }
                     Command::InitGpu { device, queue } => {
+                        gpu_device = Some(device.clone());
+                        _gpu_queue = Some(queue.clone());
                         nanovg_ctx = cardinal_core::nanovg_wgpu::create_context(
                             device, queue,
                             cardinal_core::ffi::NVG_ANTIALIAS | cardinal_core::ffi::NVG_STENCIL_STROKES,
                         );
+                        cc::set_vg(nanovg_ctx, nanovg_ctx);
                         eprintln!("cardinal thread: wgpu NanoVG context created: {:?}", !nanovg_ctx.is_null());
                     }
                 }
@@ -240,7 +269,8 @@ struct PlacedModule {
     inputs: Vec<cc::PortInfo>,
     outputs: Vec<cc::PortInfo>,
     params: Vec<cc::ParamInfo>,
-    texture: Option<egui::TextureHandle>,
+    texture_id: Option<egui::TextureId>,
+    render_texture: Option<wgpu::Texture>,
 }
 
 struct Cable {
@@ -320,7 +350,8 @@ impl App {
                 inputs: info.inputs,
                 outputs: info.outputs,
                 params: info.params,
-                texture: None,
+                texture_id: None,
+                render_texture: None,
             });
         }
     }
@@ -368,25 +399,27 @@ impl App {
         }
     }
 
-    fn poll_render_results(&mut self, ctx: &egui::Context) {
+    fn poll_render_results(&mut self, renderer: &mut egui_wgpu::Renderer, device: &wgpu::Device) {
         while let Ok(result) = self.render_rx.try_recv() {
             if let Some(m) = self.modules.iter_mut().find(|m| m.id == result.module_id) {
-                let image = egui::ColorImage::from_rgba_unmultiplied(
-                    [result.width as _, result.height as _],
-                    &result.pixels,
-                );
-                m.texture = Some(ctx.load_texture(
-                    format!("mod_{}", result.module_id.0),
-                    image,
-                    egui::TextureOptions::LINEAR,
-                ));
+                let view = result.texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+                if let Some(tex_id) = m.texture_id {
+                    renderer.update_egui_texture_from_wgpu_texture(
+                        device, &view, wgpu::FilterMode::Linear, tex_id,
+                    );
+                } else {
+                    let tex_id = renderer.register_native_texture(
+                        device, &view, wgpu::FilterMode::Linear,
+                    );
+                    m.texture_id = Some(tex_id);
+                }
+                m.render_texture = Some(result.texture);
             }
         }
     }
 
     fn ui(&mut self, ctx: &egui::Context) {
-        self.poll_render_results(ctx);
-        self.request_renders();
 
         // ── Side panel: Module Browser ───────────────────────────────
         #[allow(deprecated)]
@@ -654,9 +687,9 @@ impl App {
             // Modules
             for m in &self.modules {
                 let mr = egui::Rect::from_min_size(m.pos, m.size);
-                if let Some(tex) = &m.texture {
+                if let Some(tex_id) = m.texture_id {
                     painter.image(
-                        tex.id(),
+                        tex_id,
                         mr,
                         egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
                         egui::Color32::WHITE,
@@ -838,6 +871,10 @@ impl ApplicationHandler for WgpuApp {
                 }
             }
             WindowEvent::RedrawRequested => {
+                // 0. Poll render results and request new renders
+                app.poll_render_results(&mut gpu.egui_renderer, &gpu.device);
+                app.request_renders();
+
                 // 1. Begin egui frame
                 let raw_input = gpu.egui_state.take_egui_input(&gpu.window);
                 #[allow(deprecated)]
