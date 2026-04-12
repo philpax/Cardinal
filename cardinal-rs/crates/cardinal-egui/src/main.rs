@@ -33,7 +33,9 @@ enum Command {
         width: i32,
         height: i32,
     },
-    CreateAudio,
+    CreateAudio {
+        reply: mpsc::Sender<Option<ModuleInfo>>,
+    },
     GetCatalog(mpsc::Sender<Vec<cc::CatalogEntry>>),
     InitGpu {
         device: Arc<wgpu::Device>,
@@ -155,8 +157,18 @@ fn spawn_cardinal_thread(
                             texture,
                         });
                     }
-                    Command::CreateAudio => {
-                        cc::audio_create();
+                    Command::CreateAudio { reply } => {
+                        let info = cc::audio_create().map(|id| {
+                            let (w, h) = cc::module_size(id);
+                            ModuleInfo {
+                                id,
+                                size: (w.max(90.0), h.max(200.0)),
+                                inputs: cc::module_inputs(id),
+                                outputs: cc::module_outputs(id),
+                                params: cc::module_params(id),
+                            }
+                        });
+                        let _ = reply.send(info);
                     }
                     Command::GetCatalog(reply) => {
                         let _ = reply.send(cc::catalog());
@@ -362,6 +374,24 @@ impl App {
         }
     }
 
+    fn spawn_audio(&mut self, pos: egui::Pos2) {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        let _ = self.cmd_tx.send(Command::CreateAudio { reply: reply_tx });
+        if let Ok(Some(info)) = reply_rx.recv() {
+            self.modules.push(PlacedModule {
+                id: info.id,
+                name: "Audio I/O".to_string(),
+                pos,
+                size: egui::vec2(info.size.0, info.size.1),
+                inputs: info.inputs,
+                outputs: info.outputs,
+                params: info.params,
+                texture_id: None,
+                render_texture: None,
+            });
+        }
+    }
+
     fn port_world_pos(m: &PlacedModule, port: &cc::PortInfo) -> egui::Pos2 {
         m.pos + egui::vec2(port.x, port.y)
     }
@@ -439,6 +469,16 @@ impl App {
                     ui.label("Filter:");
                     ui.text_edit_singleline(&mut self.browser_filter);
                 });
+                ui.separator();
+
+                // Audio I/O button — creates the stereo terminal module
+                if ui.add(egui::Button::new(
+                    egui::RichText::new("+ Audio I/O").strong()
+                ).min_size(egui::vec2(180.0, 0.0))).clicked() {
+                    let x = 220.0 + self.modules.len() as f32 * 20.0;
+                    let y = 50.0 + (self.modules.len() % 3) as f32 * 120.0;
+                    self.spawn_audio(egui::pos2(x, y));
+                }
                 ui.separator();
 
                 ui.label(
@@ -986,8 +1026,7 @@ fn main() {
     // Spawn the Cardinal thread — all engine/plugin/GL state lives there
     let (cmd_tx, render_rx) = spawn_cardinal_thread(sample_rate);
 
-    // Create audio I/O module on the Cardinal thread
-    cmd_tx.send(Command::CreateAudio).unwrap();
+    // Audio I/O module is created by the user from the UI (button in browser panel)
 
     // Start cpal audio stream (calls audio_process on its own thread;
     // engine->stepBlock has internal locking)
