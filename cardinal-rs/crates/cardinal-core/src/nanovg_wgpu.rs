@@ -1972,6 +1972,17 @@ unsafe extern "C" fn render_delete(uptr: *mut c_void) {
     }
 }
 
+/// No-op render_create for shared contexts — the primary already initialized pipelines.
+unsafe extern "C" fn render_create_shared(_uptr: *mut c_void, _other_uptr: *mut c_void) -> c_int {
+    eprintln!("nanovg-wgpu: renderCreate (shared) — reusing primary resources");
+    1
+}
+
+/// No-op render_delete for shared contexts — the primary owns the WgpuNvgContext.
+unsafe extern "C" fn render_delete_noop(_uptr: *mut c_void) {
+    // Don't free — the primary context owns the WgpuNvgContext
+}
+
 // ── Public API ───────────────────────────────────────────────────────
 
 /// Create a new NanoVG context backed by wgpu stub callbacks.
@@ -2008,6 +2019,54 @@ pub fn create_context(
         // nvgCreateInternal failed — reclaim the box so we don't leak.
         let _ = unsafe { Box::from_raw(user_ptr as *mut WgpuNvgContext) };
         eprintln!("nanovg-wgpu: nvgCreateInternal returned null!");
+    }
+    nvg_ctx
+}
+
+/// Create a second NanoVG context that shares the wgpu backend (textures,
+/// pipelines, device) with `primary`. This is needed because Rack uses
+/// two NanoVG contexts: `vg` for drawing and `fbVg` for rendering into
+/// offscreen framebuffers. They must be separate NanoVG contexts (separate
+/// transform/style stacks) but share GPU resources.
+///
+/// The returned context shares the same `WgpuNvgContext` as the primary.
+/// `render_delete` on the shared context is a no-op (the primary owns it).
+pub fn create_shared_context(
+    primary: *mut ffi::NVGcontext,
+    flags: c_int,
+) -> *mut ffi::NVGcontext {
+    if primary.is_null() {
+        return std::ptr::null_mut();
+    }
+    let params = unsafe { ffi::nvgInternalParams(primary) };
+    if params.is_null() {
+        return std::ptr::null_mut();
+    }
+    let user_ptr = unsafe { (*params).user_ptr };
+
+    // Create new NVGparams pointing to the SAME WgpuNvgContext.
+    // render_delete is replaced with a no-op since the primary owns the backend.
+    let mut shared_params = ffi::NVGparams {
+        user_ptr,
+        edge_anti_alias: if flags & ffi::NVG_ANTIALIAS != 0 { 1 } else { 0 },
+        render_create: Some(render_create_shared),
+        render_create_texture: Some(render_create_texture),
+        render_delete_texture: Some(render_delete_texture),
+        render_update_texture: Some(render_update_texture),
+        render_get_texture_size: Some(render_get_texture_size),
+        render_viewport: Some(render_viewport),
+        render_cancel: Some(render_cancel),
+        render_flush: Some(render_flush),
+        render_fill: Some(render_fill),
+        render_stroke: Some(render_stroke),
+        render_triangles: Some(render_triangles),
+        render_delete: Some(render_delete_noop),
+    };
+
+    // Pass the primary as `other` so NanoVG shares fonts
+    let nvg_ctx = unsafe { ffi::nvgCreateInternal(&mut shared_params, primary) };
+    if nvg_ctx.is_null() {
+        eprintln!("nanovg-wgpu: nvgCreateInternal (shared) returned null!");
     }
     nvg_ctx
 }

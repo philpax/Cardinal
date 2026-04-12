@@ -164,12 +164,18 @@ fn spawn_cardinal_thread(
                     Command::InitGpu { device, queue } => {
                         gpu_device = Some(device.clone());
                         _gpu_queue = Some(queue.clone());
+                        let flags = cardinal_core::ffi::NVG_ANTIALIAS | cardinal_core::ffi::NVG_STENCIL_STROKES;
                         nanovg_ctx = cardinal_core::nanovg_wgpu::create_context(
-                            device, queue,
-                            cardinal_core::ffi::NVG_ANTIALIAS | cardinal_core::ffi::NVG_STENCIL_STROKES,
+                            device, queue, flags,
                         );
-                        cc::set_vg(nanovg_ctx, nanovg_ctx);
-                        eprintln!("cardinal thread: wgpu NanoVG context created: {:?}", !nanovg_ctx.is_null());
+                        // Create a shared context for fbVg (used by FramebufferWidget
+                        // for offscreen rendering). It shares the same wgpu backend
+                        // (textures, pipelines) but has its own NanoVG state.
+                        let fb_ctx = cardinal_core::nanovg_wgpu::create_shared_context(
+                            nanovg_ctx, flags,
+                        );
+                        cc::set_vg(nanovg_ctx, fb_ctx);
+                        eprintln!("cardinal thread: wgpu NanoVG contexts created (vg + fbVg)");
                     }
                 }
             }
