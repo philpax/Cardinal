@@ -358,3 +358,29 @@ namespace midiloopback {
     void init() {}
 }
 }
+
+// ── GL function stubs ──────────────────────────────────────────────
+// Rack's FramebufferWidget.cpp calls a few GL functions directly.
+// Since we use wgpu for rendering, these are no-ops.
+extern "C" {
+    typedef unsigned int GLenum;
+    typedef int GLint;
+    typedef int GLsizei;
+    typedef unsigned int GLbitfield;
+    typedef float GLfloat;
+    typedef float GLclampf;
+
+    void glViewport(GLint, GLint, GLsizei, GLsizei) {}
+    void glClearColor(GLclampf, GLclampf, GLclampf, GLclampf) {}
+    void glClear(GLbitfield) {}
+}
+
+// ── NanoVG GL utility stubs ────────────────────────────────────────
+// FramebufferWidget uses nvglu framebuffer functions for offscreen
+// rendering. With our wgpu backend, these are no-ops.
+// Declared with C++ linkage to match nanovg_gl_utils.h
+#include <nanovg_gl_utils.h>
+
+NVGLUframebuffer* nvgluCreateFramebuffer(NVGcontext*, int, int, int) { return nullptr; }
+void nvgluBindFramebuffer(NVGLUframebuffer*) {}
+void nvgluDeleteFramebuffer(NVGLUframebuffer*) {}
