@@ -193,36 +193,16 @@ pub fn module_get_input_voltage(id: ModuleId, port_id: i32) -> f32 {
     unsafe { ffi::cardinal_module_get_input_voltage(id.0, port_id) }
 }
 
-/// Render a module widget to RGBA pixels.
-/// Returns `Some((width, height, rgba_data))` on success.
-pub fn module_render(id: ModuleId, max_width: i32, max_height: i32) -> Option<(i32, i32, Vec<u8>)> {
-    let buf_size = (max_width * max_height * 4) as usize;
-    let mut pixels = vec![0u8; buf_size];
-    let mut w = 0i32;
-    let mut h = 0i32;
-    let ok = unsafe {
-        ffi::cardinal_module_render(id.0, pixels.as_mut_ptr(), max_width, max_height, &mut w, &mut h)
-    };
-    if ok != 0 && w > 0 && h > 0 {
-        pixels.truncate((w * h * 4) as usize);
-        Some((w, h, pixels))
-    } else {
-        None
-    }
-}
-
-// ── Render context (for dedicated render thread) ────────────────────
-
-/// Make the offscreen EGL/NanoVG context current on the calling thread.
-/// Call once from a render thread before calling `module_render`.
+/// Render a module widget using the provided NanoVG context.
 /// Returns true on success.
-pub fn render_claim_context() -> bool {
-    unsafe { ffi::cardinal_render_claim_context() != 0 }
+pub fn module_render(id: ModuleId, vg: *mut ffi::NVGcontext, width: i32, height: i32) -> bool {
+    unsafe { ffi::cardinal_module_render(id.0, vg, width, height) != 0 }
 }
 
-/// Release the offscreen EGL/NanoVG context from the calling thread.
-pub fn render_release_context() {
-    unsafe { ffi::cardinal_render_release_context() }
+/// Set the NanoVG contexts used by plugin widgets for font/image loading.
+/// The contexts are owned by Rust (wgpu NanoVG backend).
+pub fn set_vg(vg: *mut ffi::NVGcontext, fb_vg: *mut ffi::NVGcontext) {
+    unsafe { ffi::cardinal_set_vg(vg, fb_vg) }
 }
 
 // ── Audio I/O ────────────────────────────────────────────────────────

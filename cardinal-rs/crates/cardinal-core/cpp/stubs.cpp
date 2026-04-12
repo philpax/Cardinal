@@ -16,7 +16,7 @@
 // ── Window stubs ────────────────────────────────────────────────────
 // The real Window is complex (owns GL context, manages GLFW).
 // We provide a minimal implementation since our bridge manages
-// EGL + NanoVG directly.
+// NanoVG contexts provided by Rust (wgpu backend).
 
 namespace rack {
 namespace window {

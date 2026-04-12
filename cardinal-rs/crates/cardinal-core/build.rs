@@ -42,16 +42,13 @@ fn main() {
     // ── 1. Rack engine ───────────────────────────────────────────────
     build_rack_engine(&rack_src, &include_dirs);
 
-    // ── 2. NanoVG GL2 + NanoSVG implementations ──────────────────────
-    build_gl_impls(&include_dirs);
-
-    // ── 3. Plugins are built by per-vendor crates via
+    // ── 2. Plugins are built by per-vendor crates via
     //       cardinal-plugins-registry (parallel compilation) ──────────
 
-    // ── 4. C deps ────────────────────────────────────────────────────
-    build_c_deps(&rack_dep, &include_dirs, &cardinal_root);
+    // ── 3. C deps (nanovg, nanosvg, blendish, etc.) ─────────────────
+    build_c_deps(&rack_dep, &include_dirs);
 
-    // ── 5. Bridge ────────────────────────────────────────────────────
+    // ── 4. Bridge ────────────────────────────────────────────────────
     build_bridge(&include_dirs);
 
     // Allow multiple definitions of stb_image, freeverb, and other
@@ -60,7 +57,7 @@ fn main() {
     println!("cargo:rustc-link-arg=-Wl,--allow-multiple-definition");
 
     // ── System libraries ─────────────────────────────────────────────
-    for lib in &["jansson", "archive", "samplerate", "speexdsp", "pthread", "dl", "GL", "GLEW", "EGL"] {
+    for lib in &["jansson", "archive", "samplerate", "speexdsp", "pthread", "dl"] {
         println!("cargo:rustc-link-lib={lib}");
     }
 
@@ -104,36 +101,9 @@ fn build_rack_engine(rack_src: &PathBuf, includes: &[PathBuf]) {
     println!("cargo:rustc-link-lib=static:+whole-archive=rack_engine");
 }
 
-fn build_gl_impls(includes: &[PathBuf]) {
+fn build_c_deps(rack_dep: &PathBuf, includes: &[PathBuf]) {
     let bridge_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("cpp");
-    let mut build = cc::Build::new();
-    build.cpp(true).std("c++17").warnings(false)
-        .define("PRIVATE", "").define("ARCH_X64", None).define("ARCH_LIN", None);
 
-    // Find system GLEW via pkg-config (works on NixOS and normal distros)
-    if let Ok(glew) = pkg_config::probe_library("glew") {
-        for path in &glew.include_paths {
-            build.include(path);
-        }
-    } else {
-        build.include("/usr/include");
-    }
-
-    for d in includes {
-        // Skip Cardinal's stub GL/glew.h
-        if d.ends_with("include") && d.to_str().unwrap().contains("Cardinal/include") { continue; }
-        build.include(d);
-    }
-    build.file(bridge_dir.join("nanovg_gl_impl.cpp"));
-    build.file(bridge_dir.join("nanosvg_impl.cpp"));
-    build.cargo_metadata(false);
-    build.compile("rack_gl_impl");
-    let out_dir = std::env::var("OUT_DIR").unwrap();
-    println!("cargo:rustc-link-search=native={out_dir}");
-    println!("cargo:rustc-link-lib=static:+whole-archive=rack_gl_impl");
-}
-
-fn build_c_deps(rack_dep: &PathBuf, includes: &[PathBuf], _cardinal_root: &PathBuf) {
     let mut build = cc::Build::new();
     build.warnings(false);
     for d in includes { build.include(d); }
@@ -143,6 +113,10 @@ fn build_c_deps(rack_dep: &PathBuf, includes: &[PathBuf], _cardinal_root: &PathB
     build.file(rack_dep.join("pffft/pffft.c"));
     build.file(rack_dep.join("pffft/fftpack.c"));
     build.file(rack_dep.join("oui-blendish/blendish.c"));
+
+    // NanoSVG implementation (SVG parsing, no GL dependency)
+    build.file(bridge_dir.join("nanosvg_impl.cpp"));
+
     build.cargo_metadata(false);
     build.compile("rack_deps");
     let out_dir = std::env::var("OUT_DIR").unwrap();
@@ -155,13 +129,6 @@ fn build_bridge(includes: &[PathBuf]) {
     let mut build = cc::Build::new();
     build.cpp(true).std("c++17").warnings(false)
         .define("PRIVATE", "").define("ARCH_X64", None).define("ARCH_LIN", None);
-
-    // System GLEW headers (for glewInit — Cardinal's stub GL/glew.h shadows the real one)
-    if let Ok(glew) = pkg_config::probe_library("glew") {
-        for path in &glew.include_paths {
-            build.include(path);
-        }
-    }
 
     for d in includes { build.include(d); }
     build.file(bridge_dir.join("bridge.cpp"));

@@ -6,6 +6,9 @@
 extern "C" {
 #endif
 
+// ── Forward declarations ────────────────────────────────────────────
+typedef struct NVGcontext NVGcontext;
+
 // ── Opaque handle types ──────────────────────────────────────────────
 typedef int64_t ModuleHandle;
 typedef int64_t CableHandle;
@@ -65,14 +68,14 @@ void  cardinal_module_set_param(ModuleHandle h, int param_id, float value);
 float cardinal_module_get_input_voltage(ModuleHandle h, int port_id);
 float cardinal_module_get_output_voltage(ModuleHandle h, int port_id);
 
+// ── NanoVG context ──────────────────────────────────────────────────
+/// Set the NanoVG contexts used by plugin widgets for font/image loading.
+void cardinal_set_vg(NVGcontext* vg, NVGcontext* fb_vg);
+
 // ── Rendering ────────────────────────────────────────────────────────
-/// Render a module widget to an RGBA pixel buffer.
+/// Render a module widget using the provided NanoVG context.
 /// Returns 1 on success, 0 on failure.
-/// `pixels` must point to a buffer of at least width*height*4 bytes.
-/// `width` and `height` are outputs: the rendered dimensions.
-int cardinal_module_render(ModuleHandle h,
-                           unsigned char* pixels, int max_width, int max_height,
-                           int* out_width, int* out_height);
+int cardinal_module_render(ModuleHandle h, NVGcontext* vg, int width, int height);
 
 // ── Cable management ─────────────────────────────────────────────────
 CableHandle cardinal_cable_create(
@@ -93,15 +96,6 @@ ModuleHandle cardinal_audio_create(void);
 /// If `input_buf` is non-NULL, it provides interleaved stereo input
 /// (into Rack) for the same block.
 void cardinal_audio_process(int frames, const float* input_buf, float* output_buf);
-
-// ── Render context (for use on a dedicated render thread) ────────────
-/// Make the offscreen EGL/NanoVG context current on the calling thread.
-/// Call this once from a render thread before calling cardinal_module_render.
-/// Returns 1 on success, 0 if no GL context is available.
-int cardinal_render_claim_context(void);
-
-/// Release the offscreen EGL/NanoVG context from the calling thread.
-void cardinal_render_release_context(void);
 
 // ── Engine stepping ──────────────────────────────────────────────────
 void cardinal_process(int frames);

@@ -1,9 +1,9 @@
 /*
  * Cardinal Rust Bridge — real plugin loading + NanoVG rendering
  *
- * Creates an offscreen EGL/GL context, initialises the Rack engine and
- * NanoVG, loads real VCV Rack plugins (starting with Fundamental), and
- * can render any ModuleWidget to an RGBA pixel buffer.
+ * The NanoVG context is created and owned by Rust (wgpu backend).
+ * This bridge initialises the Rack engine, loads plugins, and
+ * calls widget->draw() with a NanoVG context provided by Rust.
  */
 
 #include "bridge.h"
@@ -28,20 +28,6 @@
 
 #include <cstring>
 #include <unordered_map>
-
-#include <EGL/egl.h>
-#include <GL/gl.h>
-
-// We need glewInit() to populate GL extension function pointers for NanoVG.
-// Cardinal provides a stub GL/glew.h that shadows the real one, so we
-// declare the handful of GLEW symbols we need directly.
-extern "C" {
-    extern unsigned char glewExperimental;
-    typedef unsigned int GLenum;
-    GLenum glewInit(void);
-    const unsigned char* glewGetErrorString(GLenum error);
-}
-#define GLEW_OK 0
 
 // Forward declarations
 // Plugin registration is handled by Rust (cardinal_plugins_registry::register_all_plugins)
@@ -111,12 +97,7 @@ static AudioIOModule* g_audioIO = nullptr;
 static rack::Context* g_context = nullptr;
 static rack::engine::Engine* g_engine = nullptr;
 
-// EGL state
-static EGLDisplay g_eglDisplay = EGL_NO_DISPLAY;
-static EGLContext g_eglContext = EGL_NO_CONTEXT;
-static EGLSurface g_eglSurface = EGL_NO_SURFACE;
-
-// NanoVG context
+// NanoVG context — owned by Rust, set via cardinal_set_vg
 static NVGcontext* g_vg = nullptr;
 static NVGcontext* g_fbVg = nullptr;
 
@@ -129,147 +110,15 @@ struct ModuleEntry {
 static std::unordered_map<int64_t, ModuleEntry> g_modules;
 static std::unordered_map<int64_t, rack::engine::Cable*> g_cables;
 
-// ── EGL offscreen context ────────────────────────────────────────────
-// Tries EGL_PLATFORM_DEVICE_EXT first (NVIDIA headless, no X11 needed),
-// then falls back to EGL_DEFAULT_DISPLAY (Mesa swrast).
+// ── NanoVG context management ───────────────────────────────────────
 
-// EGL extension function types (loaded dynamically)
-typedef EGLBoolean (*PFNEGLQUERYDEVICESEXTPROC)(EGLint, void*, EGLint*);
-typedef EGLDisplay (*PFNEGLGETPLATFORMDISPLAYEXTPROC)(EGLenum, void*, const EGLint*);
-#define EGL_PLATFORM_DEVICE_EXT 0x313F
-
-static bool initEGL() {
-    // Strategy 1: Try EGL_PLATFORM_DEVICE_EXT for headless GPU rendering
-    // This works with NVIDIA's EGL driver without X11/Wayland
-    auto eglQueryDevicesEXT = (PFNEGLQUERYDEVICESEXTPROC)
-        eglGetProcAddress("eglQueryDevicesEXT");
-    auto eglGetPlatformDisplayEXT = (PFNEGLGETPLATFORMDISPLAYEXTPROC)
-        eglGetProcAddress("eglGetPlatformDisplayEXT");
-
-    if (eglQueryDevicesEXT && eglGetPlatformDisplayEXT) {
-        void* devices[8];
-        EGLint numDevices = 0;
-        if (eglQueryDevicesEXT(8, devices, &numDevices) && numDevices > 0) {
-            fprintf(stderr, "cardinal: found %d EGL device(s), trying platform device...\n", numDevices);
-            g_eglDisplay = eglGetPlatformDisplayEXT(EGL_PLATFORM_DEVICE_EXT, devices[0], nullptr);
-        }
+void cardinal_set_vg(NVGcontext* vg, NVGcontext* fb_vg) {
+    g_vg = vg;
+    g_fbVg = fb_vg;
+    if (g_context && g_context->window) {
+        g_context->window->vg = vg;
+        g_context->window->fbVg = fb_vg;
     }
-
-    // Strategy 2: Fall back to default display (Mesa swrast)
-    if (g_eglDisplay == EGL_NO_DISPLAY) {
-        fprintf(stderr, "cardinal: trying EGL_DEFAULT_DISPLAY...\n");
-        g_eglDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-    }
-
-    if (g_eglDisplay == EGL_NO_DISPLAY) {
-        fprintf(stderr, "cardinal: no EGL display available\n");
-        return false;
-    }
-
-    EGLint major, minor;
-    if (!eglInitialize(g_eglDisplay, &major, &minor)) {
-        fprintf(stderr, "cardinal: eglInitialize failed\n");
-        return false;
-    }
-
-    eglBindAPI(EGL_OPENGL_API);
-
-    EGLint configAttribs[] = {
-        EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
-        EGL_RED_SIZE, 8,
-        EGL_GREEN_SIZE, 8,
-        EGL_BLUE_SIZE, 8,
-        EGL_ALPHA_SIZE, 8,
-        EGL_STENCIL_SIZE, 8,
-        EGL_NONE
-    };
-
-    EGLConfig config;
-    EGLint numConfigs;
-    if (!eglChooseConfig(g_eglDisplay, configAttribs, &config, 1, &numConfigs) || numConfigs == 0) {
-        fprintf(stderr, "cardinal: eglChooseConfig failed\n");
-        return false;
-    }
-
-    EGLint pbufferAttribs[] = {
-        EGL_WIDTH, 2048,
-        EGL_HEIGHT, 2048,
-        EGL_NONE
-    };
-    g_eglSurface = eglCreatePbufferSurface(g_eglDisplay, config, pbufferAttribs);
-
-    EGLint contextAttribs[] = {
-        EGL_CONTEXT_MAJOR_VERSION, 2,
-        EGL_CONTEXT_MINOR_VERSION, 0,
-        EGL_NONE
-    };
-    g_eglContext = eglCreateContext(g_eglDisplay, config, EGL_NO_CONTEXT, contextAttribs);
-    if (g_eglContext == EGL_NO_CONTEXT) {
-        fprintf(stderr, "cardinal: eglCreateContext failed\n");
-        return false;
-    }
-
-    if (!eglMakeCurrent(g_eglDisplay, g_eglSurface, g_eglSurface, g_eglContext)) {
-        fprintf(stderr, "cardinal: eglMakeCurrent failed\n");
-        return false;
-    }
-
-    // Initialize GLEW
-    glewExperimental = GL_TRUE;
-    GLenum glewErr = glewInit();
-    if (glewErr != GLEW_OK) {
-        fprintf(stderr, "cardinal: glewInit failed: %s\n", glewGetErrorString(glewErr));
-        return false;
-    }
-
-    const char* glVersion = (const char*)glGetString(GL_VERSION);
-    if (!glVersion) {
-        fprintf(stderr, "cardinal: GL context broken\n");
-        return false;
-    }
-    const char* glVendor = (const char*)glGetString(GL_VENDOR);
-    const char* glRenderer = (const char*)glGetString(GL_RENDERER);
-    fprintf(stderr, "cardinal: EGL GL=%s (%s, %s)\n",
-            glVersion ? glVersion : "?",
-            glVendor ? glVendor : "?",
-            glRenderer ? glRenderer : "?");
-
-    return true;
-}
-
-static void shutdownEGL() {
-    if (g_eglDisplay != EGL_NO_DISPLAY) {
-        eglMakeCurrent(g_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-        if (g_eglContext != EGL_NO_CONTEXT)
-            eglDestroyContext(g_eglDisplay, g_eglContext);
-        if (g_eglSurface != EGL_NO_SURFACE)
-            eglDestroySurface(g_eglDisplay, g_eglSurface);
-        eglTerminate(g_eglDisplay);
-    }
-    g_eglDisplay = EGL_NO_DISPLAY;
-    g_eglContext = EGL_NO_CONTEXT;
-    g_eglSurface = EGL_NO_SURFACE;
-}
-
-// ── NanoVG init ──────────────────────────────────────────────────────
-
-// NanoVG GL2 functions (implementation in nanovg_gl_impl.c)
-#define NANOVG_GL2
-#include <nanovg_gl.h>
-
-static bool initNanoVG() {
-    g_vg = nvgCreateGL2(NVG_ANTIALIAS | NVG_STENCIL_STROKES);
-    if (!g_vg) {
-        fprintf(stderr, "cardinal: nvgCreateGL2 failed\n");
-        return false;
-    }
-    g_fbVg = nvgCreateGL2(NVG_ANTIALIAS | NVG_STENCIL_STROKES);
-    if (!g_fbVg) {
-        fprintf(stderr, "cardinal: nvgCreateGL2 (fb) failed\n");
-        return false;
-    }
-    return true;
 }
 
 // ── Lifecycle ────────────────────────────────────────────────────────
@@ -294,20 +143,6 @@ int cardinal_init(float sample_rate, const char* resource_dir) {
     rack::settings::headless = false;
     rack::settings::devMode = true;
 
-    // Init OSMesa + NanoVG on this thread (the Cardinal thread owns GL for its lifetime)
-    fprintf(stderr, "cardinal: [init] EGL...\n");
-    if (!initEGL()) {
-        fprintf(stderr, "cardinal: EGL init failed, falling back to headless\n");
-        rack::settings::headless = true;
-    }
-    if (!rack::settings::headless) {
-        fprintf(stderr, "cardinal: [init] NanoVG...\n");
-        if (!initNanoVG()) {
-            fprintf(stderr, "cardinal: NanoVG init failed, falling back to headless\n");
-            rack::settings::headless = true;
-        }
-    }
-
     // Create context
     fprintf(stderr, "cardinal: [init] creating Context...\n");
     g_context = new rack::Context();
@@ -319,21 +154,18 @@ int cardinal_init(float sample_rate, const char* resource_dir) {
     g_context->engine = g_engine;
     g_engine->setSampleRate(sample_rate);
 
-    // Create Window — plugin code accesses APP->window for font/image loading
+    // Create Window — plugin code accesses APP->window for font/image loading.
+    // vg/fbVg start as nullptr; Rust calls cardinal_set_vg() once the wgpu
+    // NanoVG backend is ready.
     fprintf(stderr, "cardinal: [init] creating Window...\n");
     auto* window = new rack::window::Window();
     g_context->window = window;
-    if (!rack::settings::headless) {
-        window->vg = g_vg;
-        window->fbVg = g_fbVg;
-    }
 
     // Plugin registration is deferred to Rust side
 
-    fprintf(stderr, "cardinal: [init] done — %d plugins, %d models (headless=%d)\n",
+    fprintf(stderr, "cardinal: [init] done — %d plugins, %d models\n",
             (int)rack::plugin::plugins.size(),
-            cardinal_catalog_count(),
-            (int)rack::settings::headless);
+            cardinal_catalog_count());
 
     return 0;
 }
@@ -352,7 +184,7 @@ void cardinal_shutdown(void) {
     g_modules.clear();
     g_cables.clear();
 
-    // Detach NanoVG from Window before destroying them
+    // Detach NanoVG from Window before destroying — Rust owns the contexts
     if (g_context && g_context->window) {
         g_context->window->vg = nullptr;
         g_context->window->fbVg = nullptr;
@@ -360,8 +192,8 @@ void cardinal_shutdown(void) {
         g_context->window = nullptr;
     }
 
-    if (g_fbVg) { nvgDeleteGL2(g_fbVg); g_fbVg = nullptr; }
-    if (g_vg) { nvgDeleteGL2(g_vg); g_vg = nullptr; }
+    g_vg = nullptr;
+    g_fbVg = nullptr;
 
     if (g_engine) {
         g_context->engine = nullptr;
@@ -372,7 +204,6 @@ void cardinal_shutdown(void) {
     delete g_context;
     g_context = nullptr;
 
-    shutdownEGL();
     rack::logger::destroy();
 }
 
@@ -593,96 +424,26 @@ float cardinal_module_get_output_voltage(ModuleHandle h, int port_id) {
 
 // ── Rendering ────────────────────────────────────────────────────────
 
-int cardinal_module_render(ModuleHandle h,
-                           unsigned char* pixels, int max_width, int max_height,
-                           int* out_width, int* out_height)
-{
+int cardinal_module_render(ModuleHandle h, NVGcontext* vg, int width, int height) {
     auto it = g_modules.find(h);
     if (it == g_modules.end()) return 0;
-    if (!it->second.widget) {
-        static bool warned = false;
-        if (!warned) { fprintf(stderr, "cardinal: render: widget is null (headless?)\n"); warned = true; }
-        return 0;
-    }
-    if (!g_vg) {
-        static bool warned = false;
-        if (!warned) { fprintf(stderr, "cardinal: render: g_vg is null\n"); warned = true; }
-        return 0;
-    }
+    if (!it->second.widget) return 0;
+    if (!vg) return 0;
 
     auto* widget = it->second.widget;
-    int w = (int)widget->box.size.x;
-    int h2 = (int)widget->box.size.y;
-
-    if (w <= 0 || h2 <= 0 || w > max_width || h2 > max_height)
-        return 0;
-
-    *out_width = w;
-    *out_height = h2;
-
-    // Try FBO first (works with real GPU drivers)
-    NVGLUframebuffer* fbo = nvgluCreateFramebuffer(g_vg, w, h2, 0);
-    if (fbo) {
-        nvgluBindFramebuffer(fbo);
-    } else {
-        // Fallback: render to pbuffer directly (Mesa swrast)
-        static bool warned = false;
-        if (!warned) { fprintf(stderr, "cardinal: render: FBO unavailable, using pbuffer\n"); warned = true; }
-    }
-
-    glViewport(0, 0, w, h2);
-    glClearColor(0, 0, 0, 1);
-    glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
-    nvgBeginFrame(g_vg, w, h2, 1.0f);
 
     rack::widget::Widget::DrawArgs args;
-    args.vg = g_vg;
-    args.clipBox = rack::math::Rect(rack::math::Vec(0, 0),
-                                     rack::math::Vec(w, h2));
+    args.vg = vg;
+    args.clipBox = rack::math::Rect(
+        rack::math::Vec(0, 0),
+        rack::math::Vec(width, height)
+    );
     args.fb = nullptr;
 
     widget->draw(args);
     widget->drawLayer(args, 1);
 
-    nvgEndFrame(g_vg);
-    glFinish();
-
-    glReadPixels(0, 0, w, h2, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-
-    if (fbo) {
-        nvgluBindFramebuffer(nullptr);
-        nvgluDeleteFramebuffer(fbo);
-    }
-
-    // Flip vertically (OpenGL is bottom-up)
-    int stride = w * 4;
-    std::vector<unsigned char> row(stride);
-    for (int y = 0; y < h2 / 2; y++) {
-        unsigned char* top = pixels + y * stride;
-        unsigned char* bot = pixels + (h2 - 1 - y) * stride;
-        memcpy(row.data(), top, stride);
-        memcpy(top, bot, stride);
-        memcpy(bot, row.data(), stride);
-    }
-
     return 1;
-}
-
-// ── Render context ──────────────────────────────────────────────────
-
-int cardinal_render_claim_context(void) {
-    // Set the Rack context for the calling thread (thread-local).
-    // OSMesa/NanoVG are already initialized on the Cardinal thread.
-    if (!g_context || !g_vg) return 0;
-    rack::contextSet(g_context);
-    return 1;
-}
-
-void cardinal_render_release_context(void) {
-    if (g_eglDisplay != EGL_NO_DISPLAY) {
-        eglMakeCurrent(g_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-    }
 }
 
 // ── Cable management ─────────────────────────────────────────────────

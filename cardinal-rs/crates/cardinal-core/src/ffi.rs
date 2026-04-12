@@ -192,14 +192,9 @@ unsafe extern "C" {
     pub fn cardinal_cable_create(out_module: i64, out_port: i32, in_module: i64, in_port: i32) -> i64;
     pub fn cardinal_cable_destroy(h: i64);
 
-    pub fn cardinal_module_render(
-        h: i64,
-        pixels: *mut u8, max_width: i32, max_height: i32,
-        out_width: *mut i32, out_height: *mut i32,
-    ) -> i32;
+    pub fn cardinal_module_render(h: i64, vg: *mut NVGcontext, width: i32, height: i32) -> i32;
 
-    pub fn cardinal_render_claim_context() -> i32;
-    pub fn cardinal_render_release_context();
+    pub fn cardinal_set_vg(vg: *mut NVGcontext, fb_vg: *mut NVGcontext);
 
     pub fn cardinal_audio_create() -> i64;
     pub fn cardinal_audio_process(frames: i32, input_buf: *const f32, output_buf: *mut f32);
