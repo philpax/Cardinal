@@ -229,7 +229,9 @@ static bool initNanoVG() {
 // ── Lifecycle ────────────────────────────────────────────────────────
 
 int cardinal_init(float sample_rate, const char* resource_dir) {
+    fprintf(stderr, "cardinal: [init] logger...\n");
     rack::logger::init();
+    fprintf(stderr, "cardinal: [init] random...\n");
     rack::random::init();
 
     // Set up asset paths
@@ -237,6 +239,7 @@ int cardinal_init(float sample_rate, const char* resource_dir) {
     rack::asset::systemDir = root + "/src/Rack/res";
     rack::asset::userDir = root + "/user_data";
     rack::asset::bundlePath = "";  // Empty = local source build mode
+    fprintf(stderr, "cardinal: [init] systemDir=%s\n", rack::asset::systemDir.c_str());
 
     // Create user_data dir if missing
     rack::system::createDirectories(rack::asset::userDir);
@@ -245,6 +248,7 @@ int cardinal_init(float sample_rate, const char* resource_dir) {
     rack::settings::devMode = true;
 
     // Init EGL
+    fprintf(stderr, "cardinal: [init] EGL...\n");
     if (!initEGL()) {
         fprintf(stderr, "cardinal: EGL init failed, falling back to headless\n");
         rack::settings::headless = true;
@@ -252,23 +256,29 @@ int cardinal_init(float sample_rate, const char* resource_dir) {
 
     // Init NanoVG (only if we have GL)
     if (!rack::settings::headless) {
+        fprintf(stderr, "cardinal: [init] NanoVG...\n");
         if (!initNanoVG()) {
             fprintf(stderr, "cardinal: NanoVG init failed, falling back to headless\n");
             rack::settings::headless = true;
         }
     }
 
+    fprintf(stderr, "cardinal: [init] headless=%d\n", (int)rack::settings::headless);
+
     // Create context
+    fprintf(stderr, "cardinal: [init] creating Context...\n");
     g_context = new rack::Context();
     rack::contextSet(g_context);
 
     // Create engine
+    fprintf(stderr, "cardinal: [init] creating Engine...\n");
     g_engine = new rack::engine::Engine();
     g_context->engine = g_engine;
     g_engine->setSampleRate(sample_rate);
 
     // Create a Window so APP->window is never null.
     // Plugin code (Font::load, Image::load, Svg::load) accesses APP->window.
+    fprintf(stderr, "cardinal: [init] creating Window...\n");
     auto* window = new rack::window::Window();
     g_context->window = window;
 
@@ -282,9 +292,10 @@ int cardinal_init(float sample_rate, const char* resource_dir) {
     // Plugin registration is deferred to Rust side
     // (cardinal_plugins_registry::register_all_plugins() called from cardinal_core::init())
 
-    fprintf(stderr, "cardinal: initialized with %d plugins, %d total models\n",
+    fprintf(stderr, "cardinal: [init] done — %d plugins, %d models (headless=%d)\n",
             (int)rack::plugin::plugins.size(),
-            cardinal_catalog_count());
+            cardinal_catalog_count(),
+            (int)rack::settings::headless);
 
     return 0;
 }

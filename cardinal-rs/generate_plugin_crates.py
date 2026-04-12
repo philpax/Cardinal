@@ -552,8 +552,8 @@ edition = "2024"
     )
 
     register_calls = "\n".join(
-        f"        cardinal_register_{pi}();"
-        for _, pi in init_calls
+        f'        eprintln!("cardinal-rs: [register] {vendor} ({pi})...");\n        cardinal_register_{pi}();'
+        for vendor, pi in init_calls
     )
 
     src_dir = crate_dir / "src"
