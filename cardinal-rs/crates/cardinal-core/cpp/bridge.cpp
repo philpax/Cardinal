@@ -115,6 +115,9 @@ static rack::engine::Engine* g_engine = nullptr;
 static EGLDisplay g_eglDisplay = EGL_NO_DISPLAY;
 static EGLContext g_eglContext = EGL_NO_CONTEXT;
 static EGLSurface g_eglSurface = EGL_NO_SURFACE;
+static EGLConfig  g_eglConfig;
+static int g_pbufferWidth = 0;
+static int g_pbufferHeight = 0;
 
 // NanoVG context
 static NVGcontext* g_vg = nullptr;
@@ -160,27 +163,28 @@ static bool initEGL() {
         EGL_NONE
     };
 
-    EGLConfig config;
     EGLint numConfigs;
-    if (!eglChooseConfig(g_eglDisplay, configAttribs, &config, 1, &numConfigs) || numConfigs == 0) {
+    if (!eglChooseConfig(g_eglDisplay, configAttribs, &g_eglConfig, 1, &numConfigs) || numConfigs == 0) {
         fprintf(stderr, "cardinal: eglChooseConfig failed\n");
         return false;
     }
 
-    // Create a small pbuffer surface (NanoVG FBO rendering doesn't need a real surface)
+    // Create a large pbuffer surface — we render directly to it (no FBOs)
+    g_pbufferWidth = 2048;
+    g_pbufferHeight = 2048;
     EGLint pbufferAttribs[] = {
-        EGL_WIDTH, 16,
-        EGL_HEIGHT, 16,
+        EGL_WIDTH, g_pbufferWidth,
+        EGL_HEIGHT, g_pbufferHeight,
         EGL_NONE
     };
-    g_eglSurface = eglCreatePbufferSurface(g_eglDisplay, config, pbufferAttribs);
+    g_eglSurface = eglCreatePbufferSurface(g_eglDisplay, g_eglConfig, pbufferAttribs);
 
     EGLint contextAttribs[] = {
         EGL_CONTEXT_MAJOR_VERSION, 2,
         EGL_CONTEXT_MINOR_VERSION, 0,
         EGL_NONE
     };
-    g_eglContext = eglCreateContext(g_eglDisplay, config, EGL_NO_CONTEXT, contextAttribs);
+    g_eglContext = eglCreateContext(g_eglDisplay, g_eglConfig, EGL_NO_CONTEXT, contextAttribs);
     if (g_eglContext == EGL_NO_CONTEXT) {
         fprintf(stderr, "cardinal: eglCreateContext failed\n");
         return false;
@@ -591,23 +595,15 @@ int cardinal_module_render(ModuleHandle h,
 
     if (w <= 0 || h2 <= 0 || w > max_width || h2 > max_height)
         return 0;
+    if (w > g_pbufferWidth || h2 > g_pbufferHeight)
+        return 0;
 
     *out_width = w;
     *out_height = h2;
 
-    // Caller must have claimed the render context first
-    // (via cardinal_render_claim_context on the render thread)
-
-    NVGLUframebuffer* fbo = nvgluCreateFramebuffer(g_vg, w, h2, 0);
-    if (!fbo) {
-        static bool warned = false;
-        if (!warned) { fprintf(stderr, "cardinal: render: FBO creation failed (%dx%d)\n", w, h2); warned = true; }
-        return 0;
-    }
-
-    nvgluBindFramebuffer(fbo);
+    // Render directly to the pbuffer (no FBOs needed)
     glViewport(0, 0, w, h2);
-    glClearColor(0, 0, 0, 0);
+    glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
     nvgBeginFrame(g_vg, w, h2, 1.0f);
@@ -623,10 +619,10 @@ int cardinal_module_render(ModuleHandle h,
 
     nvgEndFrame(g_vg);
 
-    glReadPixels(0, 0, w, h2, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    // Force GL to finish rendering before reading pixels
+    glFinish();
 
-    nvgluBindFramebuffer(nullptr);
-    nvgluDeleteFramebuffer(fbo);
+    glReadPixels(0, 0, w, h2, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
     // Flip vertically (OpenGL is bottom-up)
     int stride = w * 4;
