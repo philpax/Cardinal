@@ -26,7 +26,7 @@ pkgs.mkShell {
     libGLU
     glew
     libglvnd.dev  # provides EGL headers
-    mesa.osmesa   # offscreen GL rendering (avoids EGL driver issues)
+    mesa          # provides OSMesa (libOSMesa.so) for offscreen rendering
 
     # X11 (for egui/winit x11 backend)
     xorg.libX11
@@ -49,7 +49,7 @@ pkgs.mkShell {
   LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
     pkgs.libGL
     pkgs.glew
-    pkgs.mesa.osmesa
+    pkgs.mesa
     pkgs.wayland
     pkgs.libxkbcommon
     pkgs.xorg.libX11
