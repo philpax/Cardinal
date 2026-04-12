@@ -7,6 +7,7 @@
 extern crate cardinal_plugins_registry;
 
 mod ffi;
+pub mod nanovg_wgpu;
 
 use std::ffi::CString;
 use std::sync::Once;

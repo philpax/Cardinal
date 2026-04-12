@@ -1,6 +1,119 @@
 //! Raw FFI bindings to the C bridge API.
 
-use std::ffi::c_char;
+use std::ffi::{c_char, c_int, c_uchar, c_void};
+
+// ── NanoVG types ─────────────────────────────────────────────────────
+
+// Creation flags (from nanovg_gl.h)
+pub const NVG_ANTIALIAS: c_int = 1 << 0;
+pub const NVG_STENCIL_STROKES: c_int = 1 << 1;
+
+// Texture types
+pub const NVG_TEXTURE_ALPHA: c_int = 0x01;
+pub const NVG_TEXTURE_RGBA: c_int = 0x02;
+
+// Image flags
+pub const NVG_IMAGE_GENERATE_MIPMAPS: c_int = 1 << 0;
+pub const NVG_IMAGE_REPEATX: c_int = 1 << 1;
+pub const NVG_IMAGE_REPEATY: c_int = 1 << 2;
+pub const NVG_IMAGE_FLIPY: c_int = 1 << 3;
+pub const NVG_IMAGE_PREMULTIPLIED: c_int = 1 << 4;
+pub const NVG_IMAGE_NEAREST: c_int = 1 << 5;
+
+// Blend factors
+pub const NVG_ZERO: c_int = 1 << 0;
+pub const NVG_ONE: c_int = 1 << 1;
+pub const NVG_SRC_COLOR: c_int = 1 << 2;
+pub const NVG_ONE_MINUS_SRC_COLOR: c_int = 1 << 3;
+pub const NVG_DST_COLOR: c_int = 1 << 4;
+pub const NVG_ONE_MINUS_DST_COLOR: c_int = 1 << 5;
+pub const NVG_SRC_ALPHA: c_int = 1 << 6;
+pub const NVG_ONE_MINUS_SRC_ALPHA: c_int = 1 << 7;
+pub const NVG_DST_ALPHA: c_int = 1 << 8;
+pub const NVG_ONE_MINUS_DST_ALPHA: c_int = 1 << 9;
+pub const NVG_SRC_ALPHA_SATURATE: c_int = 1 << 10;
+
+/// Opaque NanoVG context (never instantiated on the Rust side).
+#[repr(C)]
+pub struct NVGcontext {
+    _opaque: [u8; 0],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct NVGcolor {
+    pub rgba: [f32; 4],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct NVGpaint {
+    pub xform: [f32; 6],
+    pub extent: [f32; 2],
+    pub radius: f32,
+    pub feather: f32,
+    pub inner_color: NVGcolor,
+    pub outer_color: NVGcolor,
+    pub image: c_int,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct NVGcompositeOperationState {
+    pub src_rgb: c_int,
+    pub dst_rgb: c_int,
+    pub src_alpha: c_int,
+    pub dst_alpha: c_int,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct NVGscissor {
+    pub xform: [f32; 6],
+    pub extent: [f32; 2],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct NVGvertex {
+    pub x: f32,
+    pub y: f32,
+    pub u: f32,
+    pub v: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct NVGpath {
+    pub first: c_int,
+    pub count: c_int,
+    pub closed: c_uchar,
+    pub nbevel: c_int,
+    pub fill: *mut NVGvertex,
+    pub nfill: c_int,
+    pub stroke: *mut NVGvertex,
+    pub nstroke: c_int,
+    pub winding: c_int,
+    pub convex: c_int,
+}
+
+#[repr(C)]
+pub struct NVGparams {
+    pub user_ptr: *mut c_void,
+    pub edge_anti_alias: c_int,
+    pub render_create: Option<unsafe extern "C" fn(uptr: *mut c_void, other_uptr: *mut c_void) -> c_int>,
+    pub render_create_texture: Option<unsafe extern "C" fn(uptr: *mut c_void, typ: c_int, w: c_int, h: c_int, image_flags: c_int, data: *const c_uchar) -> c_int>,
+    pub render_delete_texture: Option<unsafe extern "C" fn(uptr: *mut c_void, image: c_int) -> c_int>,
+    pub render_update_texture: Option<unsafe extern "C" fn(uptr: *mut c_void, image: c_int, x: c_int, y: c_int, w: c_int, h: c_int, data: *const c_uchar) -> c_int>,
+    pub render_get_texture_size: Option<unsafe extern "C" fn(uptr: *mut c_void, image: c_int, w: *mut c_int, h: *mut c_int) -> c_int>,
+    pub render_viewport: Option<unsafe extern "C" fn(uptr: *mut c_void, width: f32, height: f32, device_pixel_ratio: f32)>,
+    pub render_cancel: Option<unsafe extern "C" fn(uptr: *mut c_void)>,
+    pub render_flush: Option<unsafe extern "C" fn(uptr: *mut c_void)>,
+    pub render_fill: Option<unsafe extern "C" fn(uptr: *mut c_void, paint: *mut NVGpaint, composite_operation: NVGcompositeOperationState, scissor: *mut NVGscissor, fringe: f32, bounds: *const f32, paths: *const NVGpath, npaths: c_int)>,
+    pub render_stroke: Option<unsafe extern "C" fn(uptr: *mut c_void, paint: *mut NVGpaint, composite_operation: NVGcompositeOperationState, scissor: *mut NVGscissor, fringe: f32, stroke_width: f32, paths: *const NVGpath, npaths: c_int)>,
+    pub render_triangles: Option<unsafe extern "C" fn(uptr: *mut c_void, paint: *mut NVGpaint, composite_operation: NVGcompositeOperationState, scissor: *mut NVGscissor, verts: *const NVGvertex, nverts: c_int, fringe: f32)>,
+    pub render_delete: Option<unsafe extern "C" fn(uptr: *mut c_void)>,
+}
 
 #[repr(C)]
 #[derive(Clone)]
@@ -93,4 +206,15 @@ unsafe extern "C" {
 
     pub fn cardinal_process(frames: i32);
     pub fn cardinal_get_sample_rate() -> f32;
+}
+
+// ── NanoVG internal API ──────────────────────────────────────────────
+
+unsafe extern "C" {
+    pub fn nvgCreateInternal(params: *mut NVGparams, other: *mut NVGcontext) -> *mut NVGcontext;
+    pub fn nvgDeleteInternal(ctx: *mut NVGcontext);
+    pub fn nvgBeginFrame(ctx: *mut NVGcontext, window_width: f32, window_height: f32, device_pixel_ratio: f32);
+    pub fn nvgEndFrame(ctx: *mut NVGcontext);
+    pub fn nvgInternalParams(ctx: *mut NVGcontext) -> *mut NVGparams;
+    pub fn nvgTransformInverse(dst: *mut f32, src: *const f32) -> c_int;
 }
