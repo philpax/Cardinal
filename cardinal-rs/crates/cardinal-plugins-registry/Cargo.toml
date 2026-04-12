@@ -47,9 +47,7 @@ cardinal-plugin-littleutils = { path = "../cardinal-plugin-littleutils" }
 cardinal-plugin-lomasmodules = { path = "../cardinal-plugin-lomasmodules" }
 cardinal-plugin-lyraemodules = { path = "../cardinal-plugin-lyraemodules" }
 cardinal-plugin-meander = { path = "../cardinal-plugin-meander" }
-cardinal-plugin-mindmeldmodular = { path = "../cardinal-plugin-mindmeldmodular" }
 cardinal-plugin-ml-modules = { path = "../cardinal-plugin-ml-modules" }
-cardinal-plugin-mockbamodular = { path = "../cardinal-plugin-mockbamodular" }
 cardinal-plugin-mog = { path = "../cardinal-plugin-mog" }
 cardinal-plugin-msm = { path = "../cardinal-plugin-msm" }
 cardinal-plugin-mus-x = { path = "../cardinal-plugin-mus-x" }
@@ -63,13 +61,11 @@ cardinal-plugin-pdarray = { path = "../cardinal-plugin-pdarray" }
 cardinal-plugin-pinktrombone = { path = "../cardinal-plugin-pinktrombone" }
 cardinal-plugin-prism = { path = "../cardinal-plugin-prism" }
 cardinal-plugin-rackwindows = { path = "../cardinal-plugin-rackwindows" }
-cardinal-plugin-rcm-modules = { path = "../cardinal-plugin-rcm-modules" }
 cardinal-plugin-rebeltech = { path = "../cardinal-plugin-rebeltech" }
 cardinal-plugin-repelzen = { path = "../cardinal-plugin-repelzen" }
 cardinal-plugin-sapphire = { path = "../cardinal-plugin-sapphire" }
 cardinal-plugin-sonusmodular = { path = "../cardinal-plugin-sonusmodular" }
 cardinal-plugin-stocaudio = { path = "../cardinal-plugin-stocaudio" }
-cardinal-plugin-stoermelder-packone = { path = "../cardinal-plugin-stoermelder-packone" }
 cardinal-plugin-unless-modules = { path = "../cardinal-plugin-unless-modules" }
 cardinal-plugin-venom = { path = "../cardinal-plugin-venom" }
 cardinal-plugin-whattherack = { path = "../cardinal-plugin-whattherack" }

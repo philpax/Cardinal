@@ -61,14 +61,13 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__ImpromptuModular");
-    build.define("init", "init__ImpromptuModular");
     build.define("RefreshCounter", "ImpromptuModularRefreshCounter");
     build.define("modelRefreshCounter", "modelImpromptuModularRefreshCounter");
     build.define("RefreshCounterWidget", "ImpromptuModularRefreshCounterWidget");
 
     // Filter-out list
     let _filter_out: Vec<String> = vec![
-        "ImpromptuModular/src/comp/PanelTheme.cpp".to_string(),
+        "ImpromptuModular/src/ImpromptuModular.cpp".to_string(),
     ];
 
     // Source files
@@ -108,5 +107,15 @@ fn main() {
     collect_sources(&plugins_dir.join("ImpromptuModular/src"), &_filter_out, &plugins_dir, &mut build, 0);
     collect_sources(&plugins_dir.join("ImpromptuModular/src/comp"), &_filter_out, &plugins_dir, &mut build, 0);
 
+    // Init wrapper (renames init() only for the plugin registration file)
+    build.file(std::path::Path::new("/home/user/Cardinal/cardinal-rs/crates/cardinal-plugin-impromptumodular/init_wrapper.cpp"));
+
+    build.cargo_metadata(false);
     build.compile("cardinal_plugin_impromptumodular");
+
+    // Emit whole-archive so the linker includes all symbols (especially
+    // init__VendorName which is referenced by the registry crate)
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    println!("cargo:rustc-link-search=native={out_dir}");
+    println!("cargo:rustc-link-lib=static:+whole-archive=cardinal_plugin_impromptumodular");
 }

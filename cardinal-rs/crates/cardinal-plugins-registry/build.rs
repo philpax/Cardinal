@@ -35,7 +35,11 @@ fn main() {
     }
 
     build.file(cpp_dir.join("plugin_init.cpp"));
+    build.cargo_metadata(false);
     build.compile("cardinal_plugins_registry");
 
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    println!("cargo:rustc-link-search=native={out_dir}");
+    println!("cargo:rustc-link-lib=static:+whole-archive=cardinal_plugins_registry");
     println!("cargo:rerun-if-changed=cpp/plugin_init.cpp");
 }

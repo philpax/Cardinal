@@ -102,5 +102,14 @@ fn main() {
     }
     build.file(plugins_dir.join("BidooDark/plugin.cpp"));
 
+    // Init wrapper (renames init() only for the plugin registration file)
+
+    build.cargo_metadata(false);
     build.compile("cardinal_plugin_bidoodark");
+
+    // Emit whole-archive so the linker includes all symbols (especially
+    // init__VendorName which is referenced by the registry crate)
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    println!("cargo:rustc-link-search=native={out_dir}");
+    println!("cargo:rustc-link-lib=static:+whole-archive=cardinal_plugin_bidoodark");
 }

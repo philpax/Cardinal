@@ -99,8 +99,6 @@ extern rack::plugin::Plugin* pluginInstance__ML;
 extern rack::plugin::Plugin* pluginInstance__MSM;
 extern rack::plugin::Plugin* pluginInstance__MUS_X;
 extern rack::plugin::Plugin* pluginInstance__Meander;
-extern rack::plugin::Plugin* pluginInstance__MindMeld;
-extern rack::plugin::Plugin* pluginInstance__MockbaModular;
 extern rack::plugin::Plugin* pluginInstance__Mog;
 extern rack::plugin::Plugin* pluginInstance__Orbits;
 extern rack::plugin::Plugin* pluginInstance__PathSet;
@@ -125,11 +123,9 @@ extern rack::plugin::Plugin* pluginInstance__kocmoc;
 extern rack::plugin::Plugin* pluginInstance__myth_modules;
 extern rack::plugin::Plugin* pluginInstance__nonlinearcircuits;
 extern rack::plugin::Plugin* pluginInstance__rackwindows;
-extern rack::plugin::Plugin* pluginInstance__RCM;
 extern rack::plugin::Plugin* pluginInstance__repelzen;
 extern rack::plugin::Plugin* pluginInstance__sonusmodular;
 extern rack::plugin::Plugin* pluginInstance__stocaudio;
-extern rack::plugin::Plugin* pluginInstance__stoermelder_p1;
 extern rack::plugin::Plugin* pluginInstance__unless_modules;
 
 extern "C++" void init__21kHz(rack::plugin::Plugin*);
@@ -170,8 +166,6 @@ extern "C++" void init__ML(rack::plugin::Plugin*);
 extern "C++" void init__MSM(rack::plugin::Plugin*);
 extern "C++" void init__MUS_X(rack::plugin::Plugin*);
 extern "C++" void init__Meander(rack::plugin::Plugin*);
-extern "C++" void init__MindMeld(rack::plugin::Plugin*);
-extern "C++" void init__MockbaModular(rack::plugin::Plugin*);
 extern "C++" void init__Mog(rack::plugin::Plugin*);
 extern "C++" void init__Orbits(rack::plugin::Plugin*);
 extern "C++" void init__PathSet(rack::plugin::Plugin*);
@@ -196,11 +190,9 @@ extern "C++" void init__kocmoc(rack::plugin::Plugin*);
 extern "C++" void init__myth_modules(rack::plugin::Plugin*);
 extern "C++" void init__nonlinearcircuits(rack::plugin::Plugin*);
 extern "C++" void init__rackwindows(rack::plugin::Plugin*);
-extern "C++" void init__RCM(rack::plugin::Plugin*);
 extern "C++" void init__repelzen(rack::plugin::Plugin*);
 extern "C++" void init__sonusmodular(rack::plugin::Plugin*);
 extern "C++" void init__stocaudio(rack::plugin::Plugin*);
-extern "C++" void init__stoermelder_p1(rack::plugin::Plugin*);
 extern "C++" void init__unless_modules(rack::plugin::Plugin*);
 
 // Master init function called by the bridge
@@ -438,18 +430,6 @@ void initStaticPlugins() {
     }
     {
         Plugin* const p = new Plugin;
-        pluginInstance__MindMeld = p;
-        const StaticPluginLoader spl(p, "MindMeldModular");
-        if (spl.ok()) init__MindMeld(p);
-    }
-    {
-        Plugin* const p = new Plugin;
-        pluginInstance__MockbaModular = p;
-        const StaticPluginLoader spl(p, "MockbaModular");
-        if (spl.ok()) init__MockbaModular(p);
-    }
-    {
-        Plugin* const p = new Plugin;
         pluginInstance__Mog = p;
         const StaticPluginLoader spl(p, "Mog");
         if (spl.ok()) init__Mog(p);
@@ -594,12 +574,6 @@ void initStaticPlugins() {
     }
     {
         Plugin* const p = new Plugin;
-        pluginInstance__RCM = p;
-        const StaticPluginLoader spl(p, "rcm-modules");
-        if (spl.ok()) init__RCM(p);
-    }
-    {
-        Plugin* const p = new Plugin;
         pluginInstance__repelzen = p;
         const StaticPluginLoader spl(p, "repelzen");
         if (spl.ok()) init__repelzen(p);
@@ -615,12 +589,6 @@ void initStaticPlugins() {
         pluginInstance__stocaudio = p;
         const StaticPluginLoader spl(p, "stocaudio");
         if (spl.ok()) init__stocaudio(p);
-    }
-    {
-        Plugin* const p = new Plugin;
-        pluginInstance__stoermelder_p1 = p;
-        const StaticPluginLoader spl(p, "stoermelder-packone");
-        if (spl.ok()) init__stoermelder_p1(p);
     }
     {
         Plugin* const p = new Plugin;

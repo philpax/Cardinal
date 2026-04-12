@@ -4,6 +4,8 @@
  * audio I/O, MIDI, etc.
  */
 
+#include <audio.hpp>
+#include <app/Scene.hpp>
 // Include order matters: system.hpp and context.hpp must be visible
 // to Window.hpp and our function bodies.
 #include <system.hpp>
@@ -126,10 +128,54 @@ std::shared_ptr<Image> Image::load(const std::string& filename) {
 }  // namespace rack
 
 // ── GLFW stubs ──────────────────────────────────────────────────────
+// ── Scene stubs ─────────────────────────────────────────────────────
+namespace rack { namespace app {
+    math::Vec Scene::getMousePos() { return mousePos; }
+}}
+
+// ── Audio port stubs (we use our own AudioIO terminal module) ───────
+namespace rack { namespace audio {
+    Port::Port() {}
+    Port::~Port() {}
+    void Port::setDriverId(int) {}
+    int Port::getDriverId() { return 0; }
+    float Port::getSampleRate() { return 0; }
+    int Port::getBlockSize() { return 0; }
+    int Port::getNumInputs() { return 0; }
+    int Port::getNumOutputs() { return 0; }
+    void Port::fromJson(json_t*) {}
+    json_t* Port::toJson() { return json_object(); }
+    std::string Port::getDeviceName(int) { return ""; }
+    std::vector<int> Port::getDeviceIds() { return {}; }
+    int Port::getDeviceNumInputs(int) { return 0; }
+    int Port::getDeviceNumOutputs(int) { return 0; }
+    int Port::getDeviceId() { return 0; }
+    Device* Port::getDevice() { return nullptr; }
+}}
+
+// ── App stubs for skipped subsystems ────────────────────────────────
+#include <midi.hpp>
+#include <app/AudioDisplay.hpp>
+#include <app/MidiDisplay.hpp>
+namespace rack { namespace app {
+    void appendMidiMenu(ui::Menu*, rack::midi::Port*) {}
+    void AudioDisplay::setAudioPort(audio::Port*) {}
+}}
+
+// osdialog prompt stub
+#include <osdialog.h>
+char* osdialog_prompt(osdialog_message_level level, const char* message, const char* text) {
+    (void)level; (void)message; (void)text;
+    return nullptr;
+}
+
+// ── GLFW stubs ──────────────────────────────────────────────────────
 void glfwSetClipboardString(GLFWwindow*, const char*) {}
 const char* glfwGetClipboardString(GLFWwindow*) { return ""; }
 int glfwGetKeyScancode(int) { return 0; }
 const char* glfwGetKeyName(int, int) { return ""; }
+int glfwGetKey(GLFWwindow*, int) { return 0; }
+double glfwGetTime() { return 0.0; }
 void glfwSetCursor(GLFWwindow*, GLFWcursor*) {}
 GLFWcursor* glfwCreateStandardCursor(int) { return nullptr; }
 

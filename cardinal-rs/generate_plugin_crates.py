@@ -45,6 +45,10 @@ SKIP_PLUGINS = {
     "DHE-Modules",           # Non-standard source layout
     "ValleyAudio",           # SIMDE SSE3 redefinition conflict
     "alefsbits",             # GCC 14 incompatible (begin/end on C arrays)
+    "MindMeldModular",       # Cross-dep on ImpromptuModular theme code
+    "rcm-modules",           # Needs gverb from Bidoo dep
+    "stoermelder-packone",   # Needs custom plugin init handling
+    "MockbaModular",         # loadBack utility missing
 }
 
 def parse_drwav_list(makefile_text):
@@ -246,18 +250,14 @@ cc = "1"
     pi_rename = info["pi_rename"]
 
     # Generate the defines for custom_module_names
-    # custom_module_names = -D${1}=${2}${1} -Dmodel${1}=model${2}${1} -D${1}Widget=${2}${1}Widget
     defines_code = ""
-    # Plugins that explicitly need init renamed (from Makefile's -Dinit=)
-    INIT_RENAME_PLUGINS = {
-        "AaronStatic", "Autinn", "ImpromptuModular", "MindMeld",
-        "WSTD_Drums", "mscHack", "stoermelder_p1",
-    }
 
     if pi_rename:
         defines_code += f'    build.define("pluginInstance", "pluginInstance__{pi_rename}");\n'
-        if pi_rename in INIT_RENAME_PLUGINS:
-            defines_code += f'    build.define("init", "init__{pi_rename}");\n'
+        # NOTE: we do NOT globally rename init() — that would break
+        # rack::random::init() and other Rack API calls. Instead, we
+        # generate a wrapper file that renames init only for the plugin's
+        # registration file (see init_wrapper below).
 
     for sym in custom_renames:
         # Use pi_rename as prefix (matches the Makefile's convention)
@@ -309,23 +309,88 @@ cc = "1"
     for ef in explicit_files:
         source_code_parts.append(f'    build.file(plugins_dir.join("{ef}"));')
 
-    # Keep filter-outs for files with external deps, but DON'T filter out
-    # plugin.cpp/main-header files (they define pluginInstance and init).
-    # The Makefile filtered those for the monolithic plugins.cpp approach;
-    # in per-vendor crates we need them.
+    # Find the init file — the .cpp that defines `void init(Plugin`
+    # First check filter-outs for plugin.cpp / vendor header
+    init_files = []
     kept_filter_out = []
     for f in filter_out:
         basename = f.rsplit("/", 1)[-1] if "/" in f else f
-        # Keep the filter if it's NOT a plugin registration file
-        if basename not in ("plugin.cpp",) and not basename.endswith(".hpp"):
-            # Also check if it looks like the vendor's main header cpp
+        is_init_file = False
+        if basename == "plugin.cpp":
+            is_init_file = True
+        elif not basename.endswith(".hpp"):
             stem = basename.replace(".cpp", "")
             vendor_lower = vendor.lower().replace("-", "").replace("_", "")
-            if stem.lower().replace("-", "").replace("_", "") != vendor_lower:
-                kept_filter_out.append(f)
+            if stem.lower().replace("-", "").replace("_", "") == vendor_lower:
+                is_init_file = True
+        if is_init_file:
+            init_files.append(f)
+        else:
+            kept_filter_out.append(f)
+
+    # If no init file found in filter-outs, scan source directory
+    if not init_files:
+        plugin_src = PLUGINS_DIR / vendor / "src"
+        if plugin_src.exists():
+            for cpp in sorted(plugin_src.iterdir()):
+                if cpp.suffix != ".cpp":
+                    continue
+                try:
+                    content = cpp.read_text(errors="ignore")
+                    if ("void init(Plugin" in content or
+                        "void init(rack::plugin::Plugin" in content or
+                        "void init(rack::Plugin" in content):
+                        rel = f"{vendor}/src/{cpp.name}"
+                        init_files.append(rel)
+                        break
+                except:
+                    pass
+
+    # In per-vendor crates, most Makefile filter-outs are unnecessary
+    # (they were for the monolithic plugins.cpp approach). Only keep
+    # filter-outs for files known to have external dep issues.
+    EXTERNAL_DEP_FILES = {
+        "Bidoo/src/ANTN.cpp",         # needs curl
+        "Befaco/src/MidiThing.cpp",   # needs MIDI hardware
+    }
+    kept_filter_out = [f for f in kept_filter_out if f in EXTERNAL_DEP_FILES]
+
+    # Generate init wrapper — renames init() to init__VendorName only in
+    # the plugin registration file, not globally (which would break
+    # rack::random::init() etc.)
+    init_wrapper_code = ""
+    if pi_rename and init_files:
+        wrapper_path = crate_dir / "init_wrapper.cpp"
+        # Pick the first init file (usually plugin.cpp)
+        init_file = init_files[0]
+        # The wrapper defines init and pluginInstance renames, then includes the real file
+        wrapper_content = f'''// Auto-generated wrapper — renames init() for link uniqueness
+#define init init__{pi_rename}
+#include "{PLUGINS_DIR / init_file}"
+'''
+        wrapper_path.write_text(wrapper_content)
+        init_wrapper_code = f'    build.file(std::path::Path::new("{wrapper_path.resolve()}"));\n'
+        # Keep init files in filter-out so the recursive walk doesn't also compile them
+        kept_filter_out.extend(init_files)
+    elif init_files:
+        # No pi_rename — still need to rename init to avoid conflicts
+        # Use vendor name with underscores as fallback
+        safe_name = vendor.replace("-", "_")
+        wrapper_path = crate_dir / "init_wrapper.cpp"
+        init_file = init_files[0]
+        wrapper_content = f'''// Auto-generated wrapper — renames init() for link uniqueness
+#define init init__{safe_name}
+#include "{PLUGINS_DIR / init_file}"
+'''
+        wrapper_path.write_text(wrapper_content)
+        init_wrapper_code = f'    build.file(std::path::Path::new("{wrapper_path.resolve()}"));\n'
+        kept_filter_out.extend(init_files)
+        # Update pi_rename for registry to know the init name
+        if not pi_rename:
+            pi_rename = safe_name
+            info["pi_rename"] = safe_name
+
     filter_out_code = "\n".join(f'        "{f}".to_string(),' for f in kept_filter_out)
-    # Use underscore prefix if filter_out is unused (no source dirs to glob)
-    filter_out_var = "_filter_out" if not source_dirs else "filter_out"
 
     build_rs = f"""use std::path::PathBuf;
 
@@ -398,7 +463,16 @@ fn main() {{
     // Source files
 {chr(10).join(source_code_parts)}
 
+    // Init wrapper (renames init() only for the plugin registration file)
+{init_wrapper_code}
+    build.cargo_metadata(false);
     build.compile("{crate_name.replace('-', '_')}");
+
+    // Emit whole-archive so the linker includes all symbols (especially
+    // init__VendorName which is referenced by the registry crate)
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    println!("cargo:rustc-link-search=native={{out_dir}}");
+    println!("cargo:rustc-link-lib=static:+whole-archive={crate_name.replace('-', '_')}");
 }}
 """
 
@@ -450,23 +524,17 @@ cc = "1"
         if pi:
             init_calls.append((vendor, pi))
 
-    INIT_RENAME_PLUGINS = {
-        "AaronStatic", "Autinn", "ImpromptuModular", "MindMeld",
-        "WSTD_Drums", "mscHack", "stoermelder_p1",
-    }
-
     # Generate the extern declarations and init calls
+    # All vendors now have init renamed to init__VendorName via the wrapper
     extern_decls = []
     init_stmts = []
     for vendor, pi_name in init_calls:
-        # Use renamed init for plugins that need it, plain init for the rest
-        init_fn = f"init__{pi_name}" if pi_name in INIT_RENAME_PLUGINS else "init"
-        extern_decls.append(f'extern "C++" void {init_fn}(rack::plugin::Plugin*);')
+        extern_decls.append(f'extern "C++" void init__{pi_name}(rack::plugin::Plugin*);')
         init_stmts.append(f"""    {{
         Plugin* const p = new Plugin;
         pluginInstance__{pi_name} = p;
         const StaticPluginLoader spl(p, "{vendor}");
-        if (spl.ok()) {init_fn}(p);
+        if (spl.ok()) init__{pi_name}(p);
     }}""")
 
     extern_pi_decls = "\n".join(
@@ -594,8 +662,12 @@ fn main() {
     }
 
     build.file(cpp_dir.join("plugin_init.cpp"));
+    build.cargo_metadata(false);
     build.compile("cardinal_plugins_registry");
 
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    println!("cargo:rustc-link-search=native={out_dir}");
+    println!("cargo:rustc-link-lib=static:+whole-archive=cardinal_plugins_registry");
     println!("cargo:rerun-if-changed=cpp/plugin_init.cpp");
 }
 """)

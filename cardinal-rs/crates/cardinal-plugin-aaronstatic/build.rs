@@ -61,14 +61,13 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__AaronStatic");
-    build.define("init", "init__AaronStatic");
     build.define("RefreshCounter", "AaronStaticRefreshCounter");
     build.define("modelRefreshCounter", "modelAaronStaticRefreshCounter");
     build.define("RefreshCounterWidget", "AaronStaticRefreshCounterWidget");
 
     // Filter-out list
     let _filter_out: Vec<String> = vec![
-
+        "AaronStatic/src/plugin.cpp".to_string(),
     ];
 
     // Source files
@@ -107,5 +106,15 @@ fn main() {
     }
     collect_sources(&plugins_dir.join("AaronStatic/src"), &_filter_out, &plugins_dir, &mut build, 0);
 
+    // Init wrapper (renames init() only for the plugin registration file)
+    build.file(std::path::Path::new("/home/user/Cardinal/cardinal-rs/crates/cardinal-plugin-aaronstatic/init_wrapper.cpp"));
+
+    build.cargo_metadata(false);
     build.compile("cardinal_plugin_aaronstatic");
+
+    // Emit whole-archive so the linker includes all symbols (especially
+    // init__VendorName which is referenced by the registry crate)
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    println!("cargo:rustc-link-search=native={out_dir}");
+    println!("cargo:rustc-link-lib=static:+whole-archive=cardinal_plugin_aaronstatic");
 }

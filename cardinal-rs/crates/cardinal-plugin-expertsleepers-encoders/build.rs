@@ -61,7 +61,6 @@ fn main() {
 
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__ExpertSleepersEncoders");
-    build.define("init", "init__ExpertSleepersEncoders");
 
     // Filter-out list
     let _filter_out: Vec<String> = vec![
@@ -104,5 +103,15 @@ fn main() {
     }
     collect_sources(&plugins_dir.join("ExpertSleepers-Encoders/src"), &_filter_out, &plugins_dir, &mut build, 0);
 
+    // Init wrapper (renames init() only for the plugin registration file)
+    build.file(std::path::Path::new("/home/user/Cardinal/cardinal-rs/crates/cardinal-plugin-expertsleepers-encoders/init_wrapper.cpp"));
+
+    build.cargo_metadata(false);
     build.compile("cardinal_plugin_expertsleepers_encoders");
+
+    // Emit whole-archive so the linker includes all symbols (especially
+    // init__VendorName which is referenced by the registry crate)
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    println!("cargo:rustc-link-search=native={out_dir}");
+    println!("cargo:rustc-link-lib=static:+whole-archive=cardinal_plugin_expertsleepers_encoders");
 }

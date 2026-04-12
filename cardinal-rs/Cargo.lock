@@ -615,21 +615,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cardinal-plugin-mindmeldmodular"
-version = "0.1.0"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "cardinal-plugin-ml-modules"
-version = "0.1.0"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "cardinal-plugin-mockbamodular"
 version = "0.1.0"
 dependencies = [
  "cc",
@@ -727,13 +713,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cardinal-plugin-rcm-modules"
-version = "0.1.0"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "cardinal-plugin-rebeltech"
 version = "0.1.0"
 dependencies = [
@@ -763,13 +742,6 @@ dependencies = [
 
 [[package]]
 name = "cardinal-plugin-stocaudio"
-version = "0.1.0"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "cardinal-plugin-stoermelder-packone"
 version = "0.1.0"
 dependencies = [
  "cc",
@@ -864,9 +836,7 @@ dependencies = [
  "cardinal-plugin-lomasmodules",
  "cardinal-plugin-lyraemodules",
  "cardinal-plugin-meander",
- "cardinal-plugin-mindmeldmodular",
  "cardinal-plugin-ml-modules",
- "cardinal-plugin-mockbamodular",
  "cardinal-plugin-mog",
  "cardinal-plugin-msm",
  "cardinal-plugin-mus-x",
@@ -880,13 +850,11 @@ dependencies = [
  "cardinal-plugin-pinktrombone",
  "cardinal-plugin-prism",
  "cardinal-plugin-rackwindows",
- "cardinal-plugin-rcm-modules",
  "cardinal-plugin-rebeltech",
  "cardinal-plugin-repelzen",
  "cardinal-plugin-sapphire",
  "cardinal-plugin-sonusmodular",
  "cardinal-plugin-stocaudio",
- "cardinal-plugin-stoermelder-packone",
  "cardinal-plugin-unless-modules",
  "cardinal-plugin-venom",
  "cardinal-plugin-whattherack",

@@ -2,7 +2,6 @@
 name = "cardinal-egui"
 version = "0.1.0"
 edition = "2024"
-
 [dependencies]
 cardinal-core = { path = "../cardinal-core" }
 eframe = { version = "0.31", default-features = false, features = ["glow", "default_fonts", "x11"] }

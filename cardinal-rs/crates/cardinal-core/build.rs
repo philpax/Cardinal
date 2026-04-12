@@ -54,6 +54,10 @@ fn main() {
     // ── 5. Bridge ────────────────────────────────────────────────────
     build_bridge(&include_dirs);
 
+    // Disable --gc-sections which removes plugin init symbols that are
+    // only referenced from C++ (plugin_init.cpp) not from Rust
+    println!("cargo:rustc-link-arg=-Wl,--no-gc-sections");
+
     // ── System libraries ─────────────────────────────────────────────
     for lib in &["jansson", "archive", "samplerate", "speexdsp", "pthread", "dl", "GL", "GLEW", "EGL"] {
         println!("cargo:rustc-link-lib={lib}");
@@ -68,7 +72,7 @@ fn main() {
 fn build_rack_engine(rack_src: &PathBuf, includes: &[PathBuf]) {
     let skip: &[&str] = &[
         "asset", "audio", "common", "dep", "discord", "gamepad", "keyboard",
-        "library", "midi", "midiloopback", "network", "rtaudio", "rtmidi",
+        "library", "midiloopback", "network", "rtaudio", "rtmidi",
         "AudioDisplay", "MidiDisplay", "Browser", "MenuBar", "TipWindow",
         "Scene", "Window",
     ];
@@ -121,7 +125,11 @@ fn build_gl_impls(includes: &[PathBuf]) {
     }
     build.file(bridge_dir.join("nanovg_gl_impl.cpp"));
     build.file(bridge_dir.join("nanosvg_impl.cpp"));
+    build.cargo_metadata(false);
     build.compile("rack_gl_impl");
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    println!("cargo:rustc-link-search=native={out_dir}");
+    println!("cargo:rustc-link-lib=static:+whole-archive=rack_gl_impl");
 }
 
 fn build_c_deps(rack_dep: &PathBuf, includes: &[PathBuf], _cardinal_root: &PathBuf) {
@@ -134,7 +142,11 @@ fn build_c_deps(rack_dep: &PathBuf, includes: &[PathBuf], _cardinal_root: &PathB
     build.file(rack_dep.join("pffft/pffft.c"));
     build.file(rack_dep.join("pffft/fftpack.c"));
     build.file(rack_dep.join("oui-blendish/blendish.c"));
+    build.cargo_metadata(false);
     build.compile("rack_deps");
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    println!("cargo:rustc-link-search=native={out_dir}");
+    println!("cargo:rustc-link-lib=static:+whole-archive=rack_deps");
 }
 
 fn build_bridge(includes: &[PathBuf]) {
