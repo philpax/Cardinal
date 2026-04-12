@@ -54,9 +54,10 @@ fn main() {
     // ── 5. Bridge ────────────────────────────────────────────────────
     build_bridge(&include_dirs);
 
-    // Disable --gc-sections which removes plugin init symbols that are
-    // only referenced from C++ (plugin_init.cpp) not from Rust
-    println!("cargo:rustc-link-arg=-Wl,--no-gc-sections");
+    // Allow multiple definitions of stb_image, freeverb, and other
+    // single-file libraries that get compiled into multiple plugin crates.
+    // The linker picks the first definition.
+    println!("cargo:rustc-link-arg=-Wl,--allow-multiple-definition");
 
     // ── System libraries ─────────────────────────────────────────────
     for lib in &["jansson", "archive", "samplerate", "speexdsp", "pthread", "dl", "GL", "GLEW", "EGL"] {

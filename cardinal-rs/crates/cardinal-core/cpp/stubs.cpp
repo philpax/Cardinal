@@ -262,9 +262,43 @@ osdialog_filters* osdialog_filters_parse(const char*) { return nullptr; }
 void osdialog_filters_free(osdialog_filters*) {}
 
 // ── Plugin registry ─────────────────────────────────────────────────
+// ── Null stubs for model pointers missing from current submodule revisions ──
+#include <plugin/Model.hpp>
+rack::plugin::Model* modelViz = nullptr;
+rack::plugin::Model* modelUnity = nullptr;
+rack::plugin::Model* modelMidiThing = nullptr;  // Befaco (needs MIDI hw)
+rack::plugin::Model* modelANTN = nullptr;       // Bidoo (needs curl)
+// ChowDSP models (source files in dep subdirs not compiled)
+rack::plugin::Model* modelChowTape = nullptr;
+rack::plugin::Model* modelChowPhaserFeedback = nullptr;
+rack::plugin::Model* modelChowPhaserMod = nullptr;
+rack::plugin::Model* modelChowFDN = nullptr;
+rack::plugin::Model* modelChowRNN = nullptr;
+rack::plugin::Model* modelChowModal = nullptr;
+rack::plugin::Model* modelChowDer = nullptr;
+rack::plugin::Model* modelWarp = nullptr;
+rack::plugin::Model* modelCredit = nullptr;
+rack::plugin::Model* modelChowPulse = nullptr;
+rack::plugin::Model* modelChowTapeCompression = nullptr;
+rack::plugin::Model* modelChowTapeChew = nullptr;
+rack::plugin::Model* modelChowTapeDegrade = nullptr;
+rack::plugin::Model* modelChowTapeLoss = nullptr;
+rack::plugin::Model* modelChowChorus = nullptr;
+rack::plugin::Model* modelWerner = nullptr;     // repelzen (renamed away)
+
 // hostTerminalModels — used by Engine to identify terminal modules.
 // Populated by bridge.cpp when creating the AudioIO module.
 std::vector<rack::plugin::Model*> hostTerminalModels;
+
+// ── Asset path helpers for plugin registration ──────────────────────
+namespace rack { namespace asset {
+    std::string pluginManifest(const std::string& dirname) {
+        return rack::system::join(systemDir, "..", "..", "plugins", dirname, "plugin.json");
+    }
+    std::string pluginPath(const std::string& dirname) {
+        return rack::system::join(systemDir, "..", "..", "plugins", dirname);
+    }
+}}
 
 namespace rack {
 namespace plugin {

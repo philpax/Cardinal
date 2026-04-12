@@ -14,7 +14,6 @@ cardinal-plugin-autinn = { path = "../cardinal-plugin-autinn" }
 cardinal-plugin-axioma = { path = "../cardinal-plugin-axioma" }
 cardinal-plugin-befaco = { path = "../cardinal-plugin-befaco" }
 cardinal-plugin-bidoo = { path = "../cardinal-plugin-bidoo" }
-cardinal-plugin-bidoodark = { path = "../cardinal-plugin-bidoodark" }
 cardinal-plugin-biset = { path = "../cardinal-plugin-biset" }
 cardinal-plugin-bogaudiomodules = { path = "../cardinal-plugin-bogaudiomodules" }
 cardinal-plugin-catromodulo = { path = "../cardinal-plugin-catromodulo" }
@@ -38,7 +37,6 @@ cardinal-plugin-h4n4-modules = { path = "../cardinal-plugin-h4n4-modules" }
 cardinal-plugin-hamptonharmonics = { path = "../cardinal-plugin-hamptonharmonics" }
 cardinal-plugin-ihtsyn = { path = "../cardinal-plugin-ihtsyn" }
 cardinal-plugin-impromptumodular = { path = "../cardinal-plugin-impromptumodular" }
-cardinal-plugin-impromptumodulardark = { path = "../cardinal-plugin-impromptumodulardark" }
 cardinal-plugin-jw-modules = { path = "../cardinal-plugin-jw-modules" }
 cardinal-plugin-kocmoc = { path = "../cardinal-plugin-kocmoc" }
 cardinal-plugin-lifeformmodular = { path = "../cardinal-plugin-lifeformmodular" }
@@ -72,6 +70,3 @@ cardinal-plugin-whattherack = { path = "../cardinal-plugin-whattherack" }
 cardinal-plugin-wstd-drums = { path = "../cardinal-plugin-wstd-drums" }
 cardinal-plugin-zetacarinaemodules = { path = "../cardinal-plugin-zetacarinaemodules" }
 cardinal-plugin-zzc = { path = "../cardinal-plugin-zzc" }
-
-[build-dependencies]
-cc = "1"

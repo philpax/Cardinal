@@ -104,14 +104,7 @@ fn main() {
     build.file(plugins_dir.join("ESeries/src/E340.cpp"));
 
     // Init wrapper (renames init() only for the plugin registration file)
-    build.file(std::path::Path::new("/home/user/Cardinal/cardinal-rs/crates/cardinal-plugin-eseries/init_wrapper.cpp"));
+    build.file(std::path::Path::new("/home/user/Cardinal/cardinal-rs/crates/cardinal-plugin-eseries/register.cpp"));
 
-    build.cargo_metadata(false);
     build.compile("cardinal_plugin_eseries");
-
-    // Emit whole-archive so the linker includes all symbols (especially
-    // init__VendorName which is referenced by the registry crate)
-    let out_dir = std::env::var("OUT_DIR").unwrap();
-    println!("cargo:rustc-link-search=native={out_dir}");
-    println!("cargo:rustc-link-lib=static:+whole-archive=cardinal_plugin_eseries");
 }

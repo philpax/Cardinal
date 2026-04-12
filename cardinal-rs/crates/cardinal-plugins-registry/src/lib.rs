@@ -1,4 +1,8 @@
-// Auto-generated: references all plugin vendor crates to ensure they're linked.
+// Auto-generated: plugin registration via Rust FFI.
+// Each vendor crate exports a C function cardinal_register_<name>().
+// Calling them from Rust ensures the linker resolves cross-archive refs.
+
+// Reference vendor crates so their native libs get linked
 extern crate cardinal_plugin_aaronstatic;
 extern crate cardinal_plugin_admiral;
 extern crate cardinal_plugin_algoritmarte;
@@ -9,7 +13,6 @@ extern crate cardinal_plugin_autinn;
 extern crate cardinal_plugin_axioma;
 extern crate cardinal_plugin_befaco;
 extern crate cardinal_plugin_bidoo;
-extern crate cardinal_plugin_bidoodark;
 extern crate cardinal_plugin_biset;
 extern crate cardinal_plugin_bogaudiomodules;
 extern crate cardinal_plugin_catromodulo;
@@ -33,7 +36,6 @@ extern crate cardinal_plugin_h4n4_modules;
 extern crate cardinal_plugin_hamptonharmonics;
 extern crate cardinal_plugin_ihtsyn;
 extern crate cardinal_plugin_impromptumodular;
-extern crate cardinal_plugin_impromptumodulardark;
 extern crate cardinal_plugin_jw_modules;
 extern crate cardinal_plugin_kocmoc;
 extern crate cardinal_plugin_lifeformmodular;
@@ -67,3 +69,145 @@ extern crate cardinal_plugin_whattherack;
 extern crate cardinal_plugin_wstd_drums;
 extern crate cardinal_plugin_zetacarinaemodules;
 extern crate cardinal_plugin_zzc;
+
+unsafe extern "C" {
+    fn cardinal_register_21kHz();
+    fn cardinal_register_8Mode();
+    fn cardinal_register_AS();
+    fn cardinal_register_AaronStatic();
+    fn cardinal_register_Algoritmarte();
+    fn cardinal_register_AmalgamatedHarmonics();
+    fn cardinal_register_AnimatedCircuits();
+    fn cardinal_register_Autinn();
+    fn cardinal_register_Axioma();
+    fn cardinal_register_Befaco();
+    fn cardinal_register_Bidoo();
+    fn cardinal_register_Biset();
+    fn cardinal_register_BogaudioModules();
+    fn cardinal_register_CVfunk();
+    fn cardinal_register_CatroModulo();
+    fn cardinal_register_ChowDSP();
+    fn cardinal_register_Computerscare();
+    fn cardinal_register_ESeries();
+    fn cardinal_register_EnigmaCurry();
+    fn cardinal_register_ExpertSleepersEncoders();
+    fn cardinal_register_Extratone();
+    fn cardinal_register_FehlerFabrik();
+    fn cardinal_register_Fundamental();
+    fn cardinal_register_GlueTheGiant();
+    fn cardinal_register_GoodSheperd();
+    fn cardinal_register_GrandeModular();
+    fn cardinal_register_HamptonHarmonics();
+    fn cardinal_register_ImpromptuModular();
+    fn cardinal_register_JW();
+    fn cardinal_register_LifeFormModular();
+    fn cardinal_register_LilacLoop();
+    fn cardinal_register_LittleUtils();
+    fn cardinal_register_Lomas();
+    fn cardinal_register_Lyrae();
+    fn cardinal_register_ML();
+    fn cardinal_register_MSM();
+    fn cardinal_register_MUS_X();
+    fn cardinal_register_Meander();
+    fn cardinal_register_Mog();
+    fn cardinal_register_Orbits();
+    fn cardinal_register_PathSet();
+    fn cardinal_register_PdArray();
+    fn cardinal_register_PinkTrombone();
+    fn cardinal_register_Prism();
+    fn cardinal_register_RebelTech();
+    fn cardinal_register_sapphire();
+    fn cardinal_register_Venom();
+    fn cardinal_register_WSTD_Drums();
+    fn cardinal_register_WhatTheRack();
+    fn cardinal_register_ZZC();
+    fn cardinal_register_ZetaCarinaeModules();
+    fn cardinal_register_admiral();
+    fn cardinal_register_cf();
+    fn cardinal_register_dBiz();
+    fn cardinal_register_eightfold();
+    fn cardinal_register_forsitan();
+    fn cardinal_register_H4N4();
+    fn cardinal_register_ihtsyn();
+    fn cardinal_register_kocmoc();
+    fn cardinal_register_myth_modules();
+    fn cardinal_register_nonlinearcircuits();
+    fn cardinal_register_rackwindows();
+    fn cardinal_register_repelzen();
+    fn cardinal_register_sonusmodular();
+    fn cardinal_register_stocaudio();
+    fn cardinal_register_unless_modules();
+}
+
+/// Register all compiled plugin vendors with the Rack engine.
+/// Called from cardinal_core::init().
+pub fn register_all_plugins() {
+    unsafe {
+        cardinal_register_21kHz();
+        cardinal_register_8Mode();
+        cardinal_register_AS();
+        cardinal_register_AaronStatic();
+        cardinal_register_Algoritmarte();
+        cardinal_register_AmalgamatedHarmonics();
+        cardinal_register_AnimatedCircuits();
+        cardinal_register_Autinn();
+        cardinal_register_Axioma();
+        cardinal_register_Befaco();
+        cardinal_register_Bidoo();
+        cardinal_register_Biset();
+        cardinal_register_BogaudioModules();
+        cardinal_register_CVfunk();
+        cardinal_register_CatroModulo();
+        cardinal_register_ChowDSP();
+        cardinal_register_Computerscare();
+        cardinal_register_ESeries();
+        cardinal_register_EnigmaCurry();
+        cardinal_register_ExpertSleepersEncoders();
+        cardinal_register_Extratone();
+        cardinal_register_FehlerFabrik();
+        cardinal_register_Fundamental();
+        cardinal_register_GlueTheGiant();
+        cardinal_register_GoodSheperd();
+        cardinal_register_GrandeModular();
+        cardinal_register_HamptonHarmonics();
+        cardinal_register_ImpromptuModular();
+        cardinal_register_JW();
+        cardinal_register_LifeFormModular();
+        cardinal_register_LilacLoop();
+        cardinal_register_LittleUtils();
+        cardinal_register_Lomas();
+        cardinal_register_Lyrae();
+        cardinal_register_ML();
+        cardinal_register_MSM();
+        cardinal_register_MUS_X();
+        cardinal_register_Meander();
+        cardinal_register_Mog();
+        cardinal_register_Orbits();
+        cardinal_register_PathSet();
+        cardinal_register_PdArray();
+        cardinal_register_PinkTrombone();
+        cardinal_register_Prism();
+        cardinal_register_RebelTech();
+        cardinal_register_sapphire();
+        cardinal_register_Venom();
+        cardinal_register_WSTD_Drums();
+        cardinal_register_WhatTheRack();
+        cardinal_register_ZZC();
+        cardinal_register_ZetaCarinaeModules();
+        cardinal_register_admiral();
+        cardinal_register_cf();
+        cardinal_register_dBiz();
+        cardinal_register_eightfold();
+        cardinal_register_forsitan();
+        cardinal_register_H4N4();
+        cardinal_register_ihtsyn();
+        cardinal_register_kocmoc();
+        cardinal_register_myth_modules();
+        cardinal_register_nonlinearcircuits();
+        cardinal_register_rackwindows();
+        cardinal_register_repelzen();
+        cardinal_register_sonusmodular();
+        cardinal_register_stocaudio();
+        cardinal_register_unless_modules();
+    }
+}

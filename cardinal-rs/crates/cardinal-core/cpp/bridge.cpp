@@ -33,7 +33,7 @@
 #include <GL/gl.h>
 
 // Forward declarations
-namespace rack { namespace plugin { void initStaticPlugins(); } }
+// Plugin registration is handled by Rust (cardinal_plugins_registry::register_all_plugins)
 extern std::vector<rack::plugin::Model*> hostTerminalModels;
 
 // ── AudioIO terminal module ──────────────────────────────────────────
@@ -260,8 +260,8 @@ int cardinal_init(float sample_rate, const char* resource_dir) {
         // Note: this relies on our custom Window initialization in stubs.cpp
     }
 
-    // Init plugins
-    rack::plugin::initStaticPlugins();
+    // Plugin registration is deferred to Rust side
+    // (cardinal_plugins_registry::register_all_plugins() called from cardinal_core::init())
 
     fprintf(stderr, "cardinal: initialized with %d plugins, %d total models\n",
             (int)rack::plugin::plugins.size(),

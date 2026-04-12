@@ -20,6 +20,10 @@ pub fn init(sample_rate: f32, resource_dir: &str) {
         let c_dir = CString::new(resource_dir).expect("invalid resource_dir");
         let ret = unsafe { ffi::cardinal_init(sample_rate, c_dir.as_ptr()) };
         assert_eq!(ret, 0, "cardinal_init failed");
+
+        // Register all plugin vendors (calls each vendor's C registration function,
+        // which creates the Plugin, loads the manifest, and calls init__Vendor)
+        cardinal_plugins_registry::register_all_plugins();
     });
 }
 

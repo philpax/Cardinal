@@ -49,6 +49,8 @@ SKIP_PLUGINS = {
     "rcm-modules",           # Needs gverb from Bidoo dep
     "stoermelder-packone",   # Needs custom plugin init handling
     "MockbaModular",         # loadBack utility missing
+    "BidooDark",             # Dark theme helper, no plugin init
+    "ImpromptuModularDark",  # Dark theme helper, no plugin init
 }
 
 def parse_drwav_list(makefile_text):
@@ -355,40 +357,77 @@ cc = "1"
     }
     kept_filter_out = [f for f in kept_filter_out if f in EXTERNAL_DEP_FILES]
 
-    # Generate init wrapper — renames init() to init__VendorName only in
-    # the plugin registration file, not globally (which would break
-    # rack::random::init() etc.)
+    # Generate registration function — each vendor exports a C function
+    # that the Rust registry calls. This avoids C++ cross-archive link
+    # ordering issues by routing through Rust's .rlib resolution.
     init_wrapper_code = ""
-    if pi_rename and init_files:
-        wrapper_path = crate_dir / "init_wrapper.cpp"
-        # Pick the first init file (usually plugin.cpp)
+    safe_name = pi_rename if pi_rename else vendor.replace("-", "_")
+    if not pi_rename:
+        pi_rename = safe_name
+        info["pi_rename"] = safe_name
+
+    if init_files:
+        register_path = crate_dir / "register.cpp"
         init_file = init_files[0]
-        # The wrapper defines init and pluginInstance renames, then includes the real file
-        wrapper_content = f'''// Auto-generated wrapper — renames init() for link uniqueness
-#define init init__{pi_rename}
-#include "{PLUGINS_DIR / init_file}"
-'''
-        wrapper_path.write_text(wrapper_content)
-        init_wrapper_code = f'    build.file(std::path::Path::new("{wrapper_path.resolve()}"));\n'
-        # Keep init files in filter-out so the recursive walk doesn't also compile them
-        kept_filter_out.extend(init_files)
-    elif init_files:
-        # No pi_rename — still need to rename init to avoid conflicts
-        # Use vendor name with underscores as fallback
-        safe_name = vendor.replace("-", "_")
-        wrapper_path = crate_dir / "init_wrapper.cpp"
-        init_file = init_files[0]
-        wrapper_content = f'''// Auto-generated wrapper — renames init() for link uniqueness
+        register_content = f'''// Auto-generated — registration function for {vendor}
+// Renames init() only in the included file, not globally
 #define init init__{safe_name}
 #include "{PLUGINS_DIR / init_file}"
+#undef init
+
+#include <rack.hpp>
+#include <plugin.hpp>
+
+// Asset helpers (same as plugin_init.cpp)
+namespace rack {{ namespace asset {{
+extern std::string pluginManifest(const std::string& dirname);
+extern std::string pluginPath(const std::string& dirname);
+}} }}
+
+struct StaticPluginLoader {{
+    rack::plugin::Plugin* const plugin;
+    FILE* file;
+    json_t* rootJ;
+    StaticPluginLoader(rack::plugin::Plugin* const p, const char* const name)
+        : plugin(p), file(nullptr), rootJ(nullptr)
+    {{
+        p->path = rack::asset::pluginPath(name);
+        const std::string mf = rack::asset::pluginManifest(name);
+        if ((file = std::fopen(mf.c_str(), "r")) == nullptr) return;
+        json_error_t error;
+        if ((rootJ = json_loadf(file, 0, &error)) == nullptr) return;
+        json_t* const vJ = json_string((rack::APP_VERSION_MAJOR + ".0").c_str());
+        json_object_set(rootJ, "version", vJ);
+        json_decref(vJ);
+        p->fromJson(rootJ);
+    }}
+    ~StaticPluginLoader() {{
+        if (rootJ) {{
+            json_t* const mJ = json_object_get(rootJ, "modules");
+            plugin->modulesFromJson(mJ);
+            json_decref(rootJ);
+            rack::plugin::plugins.push_back(plugin);
+        }}
+        if (file) std::fclose(file);
+    }}
+    bool ok() const noexcept {{ return rootJ != nullptr; }}
+}};
+
+extern "C" void cardinal_register_{safe_name}() {{
+    using namespace rack;
+    using namespace rack::plugin;
+    Plugin* const p = new Plugin;
+    pluginInstance__{safe_name} = p;
+    const StaticPluginLoader spl(p, "{vendor}");
+    if (spl.ok()) init__{safe_name}(p);
+}}
 '''
-        wrapper_path.write_text(wrapper_content)
-        init_wrapper_code = f'    build.file(std::path::Path::new("{wrapper_path.resolve()}"));\n'
+        register_path.write_text(register_content)
+        init_wrapper_code = f'    build.file(std::path::Path::new("{register_path.resolve()}"));\n'
         kept_filter_out.extend(init_files)
-        # Update pi_rename for registry to know the init name
-        if not pi_rename:
-            pi_rename = safe_name
-            info["pi_rename"] = safe_name
+    else:
+        # No init file found — vendor has no registration
+        pass
 
     filter_out_code = "\n".join(f'        "{f}".to_string(),' for f in kept_filter_out)
 
@@ -465,14 +504,7 @@ fn main() {{
 
     // Init wrapper (renames init() only for the plugin registration file)
 {init_wrapper_code}
-    build.cargo_metadata(false);
     build.compile("{crate_name.replace('-', '_')}");
-
-    // Emit whole-archive so the linker includes all symbols (especially
-    // init__VendorName which is referenced by the registry crate)
-    let out_dir = std::env::var("OUT_DIR").unwrap();
-    println!("cargo:rustc-link-search=native={{out_dir}}");
-    println!("cargo:rustc-link-lib=static:+whole-archive={crate_name.replace('-', '_')}");
 }}
 """
 
@@ -485,7 +517,7 @@ def generate_registry_crate(vendor_crates, plugins_info):
     crate_dir = CRATES_DIR / "cardinal-plugins-registry"
     crate_dir.mkdir(parents=True, exist_ok=True)
 
-    # Cargo.toml — depends on all vendor crates
+    # Cargo.toml — depends on all vendor crates (no build-dependencies needed)
     deps = "\n".join(f'{name} = {{ path = "../{name}" }}' for name in sorted(vendor_crates))
 
     (crate_dir / "Cargo.toml").write_text(f"""[package]
@@ -495,25 +527,9 @@ edition = "2024"
 
 [dependencies]
 {deps}
-
-[build-dependencies]
-cc = "1"
 """)
 
-    # src/lib.rs
-    # This just needs to reference the vendor crates so they get linked
-    extern_crates = "\n".join(f"extern crate {name.replace('-', '_')};" for name in sorted(vendor_crates))
-    src_dir = crate_dir / "src"
-    src_dir.mkdir(parents=True, exist_ok=True)
-    (src_dir / "lib.rs").write_text(f"""// Auto-generated: references all plugin vendor crates to ensure they're linked.
-{extern_crates}
-""")
-
-    # Generate plugin_init.cpp — calls initStaticPlugins() for each vendor
-    cpp_dir = crate_dir / "cpp"
-    cpp_dir.mkdir(exist_ok=True)
-
-    # Collect vendor info for the init code
+    # Collect vendor info for registration
     init_calls = []
     for vendor, info in sorted(plugins_info.items()):
         if vendor in SKIP_PLUGINS:
@@ -524,153 +540,49 @@ cc = "1"
         if pi:
             init_calls.append((vendor, pi))
 
-    # Generate the extern declarations and init calls
-    # All vendors now have init renamed to init__VendorName via the wrapper
-    extern_decls = []
-    init_stmts = []
-    for vendor, pi_name in init_calls:
-        extern_decls.append(f'extern "C++" void init__{pi_name}(rack::plugin::Plugin*);')
-        init_stmts.append(f"""    {{
-        Plugin* const p = new Plugin;
-        pluginInstance__{pi_name} = p;
-        const StaticPluginLoader spl(p, "{vendor}");
-        if (spl.ok()) init__{pi_name}(p);
-    }}""")
+    # src/lib.rs — declares extern "C" registration functions and calls them
+    extern_crates = "\n".join(
+        f"extern crate {name.replace('-', '_')};"
+        for name in sorted(vendor_crates)
+    )
 
-    extern_pi_decls = "\n".join(
-        f"extern rack::plugin::Plugin* pluginInstance__{pi};"
+    extern_fns = "\n".join(
+        f"    fn cardinal_register_{pi}();"
         for _, pi in init_calls
     )
-    extern_init_decls = "\n".join(extern_decls)
-    init_body = "\n".join(init_stmts)
 
-    plugin_init_cpp = f"""// Auto-generated by generate_plugin_crates.py
-// Registers all compiled plugin vendors with the Rack engine.
+    register_calls = "\n".join(
+        f"        cardinal_register_{pi}();"
+        for _, pi in init_calls
+    )
 
-#include <rack.hpp>
-#include <plugin.hpp>
+    src_dir = crate_dir / "src"
+    src_dir.mkdir(parents=True, exist_ok=True)
+    (src_dir / "lib.rs").write_text(f"""// Auto-generated: plugin registration via Rust FFI.
+// Each vendor crate exports a C function cardinal_register_<name>().
+// Calling them from Rust ensures the linker resolves cross-archive refs.
 
-using namespace rack;
-using namespace rack::plugin;
+// Reference vendor crates so their native libs get linked
+{extern_crates}
 
-// Asset path helpers (match Cardinal's custom/asset.cpp)
-namespace rack {{
-namespace asset {{
-std::string pluginManifest(const std::string& dirname) {{
-    return rack::system::join(systemDir, "..", "..", "plugins", dirname, "plugin.json");
-}}
-std::string pluginPath(const std::string& dirname) {{
-    return rack::system::join(systemDir, "..", "..", "plugins", dirname);
-}}
-}}
+unsafe extern "C" {{
+{extern_fns}
 }}
 
-// StaticPluginLoader (from Cardinal's plugins.cpp)
-struct StaticPluginLoader {{
-    Plugin* const plugin;
-    FILE* file;
-    json_t* rootJ;
-
-    StaticPluginLoader(Plugin* const p, const char* const name)
-        : plugin(p), file(nullptr), rootJ(nullptr)
-    {{
-        p->path = asset::pluginPath(name);
-        const std::string manifestFilename = asset::pluginManifest(name);
-        if ((file = std::fopen(manifestFilename.c_str(), "r")) == nullptr) {{
-            fprintf(stderr, "cardinal: manifest %s not found\\n", manifestFilename.c_str());
-            return;
-        }}
-        json_error_t error;
-        if ((rootJ = json_loadf(file, 0, &error)) == nullptr) {{
-            fprintf(stderr, "cardinal: JSON error at %s %d:%d %s\\n",
-                    manifestFilename.c_str(), error.line, error.column, error.text);
-            return;
-        }}
-        json_t* const versionJ = json_string((APP_VERSION_MAJOR + ".0").c_str());
-        json_object_set(rootJ, "version", versionJ);
-        json_decref(versionJ);
-        p->fromJson(rootJ);
+/// Register all compiled plugin vendors with the Rack engine.
+/// Called from cardinal_core::init().
+pub fn register_all_plugins() {{
+    unsafe {{
+{register_calls}
     }}
-
-    ~StaticPluginLoader() {{
-        if (rootJ != nullptr) {{
-            json_t* const modulesJ = json_object_get(rootJ, "modules");
-            plugin->modulesFromJson(modulesJ);
-            json_decref(rootJ);
-            plugins.push_back(plugin);
-        }}
-        if (file != nullptr)
-            std::fclose(file);
-    }}
-
-    bool ok() const noexcept {{ return rootJ != nullptr; }}
-}};
-
-// Extern declarations for each vendor's init function and pluginInstance
-{extern_pi_decls}
-
-{extern_init_decls}
-
-// Master init function called by the bridge
-namespace rack {{
-namespace plugin {{
-
-void initStaticPlugins() {{
-{init_body}
 }}
-
-}}
-}}
-"""
-    (cpp_dir / "plugin_init.cpp").write_text(plugin_init_cpp)
-
-    # Generate build.rs for the registry crate
-    (crate_dir / "build.rs").write_text("""use std::path::PathBuf;
-
-fn main() {
-    let cardinal_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent().unwrap()  // crates/
-        .parent().unwrap()  // cardinal-rs/
-        .parent().unwrap()  // Cardinal/
-        .to_path_buf();
-
-    let rack_dir = cardinal_root.join("src/Rack");
-    let cpp_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("cpp");
-
-    let mut build = cc::Build::new();
-    build.cpp(true).std("c++17").warnings(false)
-        .define("ARCH_X64", None)
-        .define("ARCH_LIN", None)
-        .define("BUILDING_PLUGIN_MODULES", None);
-
-    for dir in &[
-        rack_dir.join("include"),
-        rack_dir.join("dep/glfw/include"),
-        rack_dir.join("dep/nanovg/src"),
-        rack_dir.join("dep/nanosvg/src"),
-        rack_dir.join("dep/oui-blendish"),
-        rack_dir.join("dep/osdialog"),
-        rack_dir.join("dep/simde"),
-        rack_dir.join("dep/filesystem/include"),
-        rack_dir.join("dep/tinyexpr"),
-        rack_dir.join("dep/pffft"),
-        cardinal_root.join("include"),
-        cardinal_root.join("plugins"),
-        cardinal_root.join("dpf/distrho"),
-    ] {
-        build.include(dir);
-    }
-
-    build.file(cpp_dir.join("plugin_init.cpp"));
-    build.cargo_metadata(false);
-    build.compile("cardinal_plugins_registry");
-
-    let out_dir = std::env::var("OUT_DIR").unwrap();
-    println!("cargo:rustc-link-search=native={out_dir}");
-    println!("cargo:rustc-link-lib=static:+whole-archive=cardinal_plugins_registry");
-    println!("cargo:rerun-if-changed=cpp/plugin_init.cpp");
-}
 """)
+
+    # No build.rs needed — no C++ to compile in the registry anymore
+    # Remove old build artifacts
+    for old_file in [crate_dir / "build.rs", crate_dir / "cpp" / "plugin_init.cpp"]:
+        if old_file.exists():
+            old_file.unlink()
 
 
 def main():
