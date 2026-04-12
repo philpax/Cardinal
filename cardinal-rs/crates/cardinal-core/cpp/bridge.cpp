@@ -257,7 +257,8 @@ int cardinal_init(float sample_rate, const char* resource_dir) {
 
     // Set up asset paths
     std::string root(resource_dir);
-    rack::asset::systemDir = root + "/src/Rack/res";
+    // systemDir should NOT include "res" — Rack code does asset::system("res/...")
+    rack::asset::systemDir = root + "/src/Rack";
     rack::asset::userDir = root + "/user_data";
     rack::asset::bundlePath = "";  // Empty = local source build mode
     fprintf(stderr, "cardinal: [init] systemDir=%s\n", rack::asset::systemDir.c_str());
@@ -572,8 +573,17 @@ int cardinal_module_render(ModuleHandle h,
                            int* out_width, int* out_height)
 {
     auto it = g_modules.find(h);
-    if (it == g_modules.end() || !it->second.widget || !g_vg)
+    if (it == g_modules.end()) return 0;
+    if (!it->second.widget) {
+        static bool warned = false;
+        if (!warned) { fprintf(stderr, "cardinal: render: widget is null (headless?)\n"); warned = true; }
         return 0;
+    }
+    if (!g_vg) {
+        static bool warned = false;
+        if (!warned) { fprintf(stderr, "cardinal: render: g_vg is null\n"); warned = true; }
+        return 0;
+    }
 
     auto* widget = it->second.widget;
     int w = (int)widget->box.size.x;
@@ -589,7 +599,11 @@ int cardinal_module_render(ModuleHandle h,
     // (via cardinal_render_claim_context on the render thread)
 
     NVGLUframebuffer* fbo = nvgluCreateFramebuffer(g_vg, w, h2, 0);
-    if (!fbo) return 0;
+    if (!fbo) {
+        static bool warned = false;
+        if (!warned) { fprintf(stderr, "cardinal: render: FBO creation failed (%dx%d)\n", w, h2); warned = true; }
+        return 0;
+    }
 
     nvgluBindFramebuffer(fbo);
     glViewport(0, 0, w, h2);
