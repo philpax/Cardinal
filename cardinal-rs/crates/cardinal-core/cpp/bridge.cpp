@@ -313,6 +313,12 @@ int cardinal_init(float sample_rate, const char* resource_dir) {
     // Plugin registration is deferred to Rust side
     // (cardinal_plugins_registry::register_all_plugins() called from cardinal_core::init())
 
+    // Release EGL context so eframe/glutin can create its own GL context.
+    // We'll re-activate ours only when rendering modules via NanoVG.
+    if (g_eglDisplay != EGL_NO_DISPLAY) {
+        eglMakeCurrent(g_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    }
+
     fprintf(stderr, "cardinal: [init] done — %d plugins, %d models (headless=%d)\n",
             (int)rack::plugin::plugins.size(),
             cardinal_catalog_count(),
@@ -594,6 +600,11 @@ int cardinal_module_render(ModuleHandle h,
     *out_width = w;
     *out_height = h2;
 
+    // Activate our EGL context for NanoVG rendering
+    if (g_eglDisplay != EGL_NO_DISPLAY) {
+        eglMakeCurrent(g_eglDisplay, g_eglSurface, g_eglSurface, g_eglContext);
+    }
+
     // Create FBO
     NVGLUframebuffer* fbo = nvgluCreateFramebuffer(g_vg, w, h2, 0);
     if (!fbo) return 0;
@@ -634,6 +645,11 @@ int cardinal_module_render(ModuleHandle h,
         memcpy(row.data(), top, stride);
         memcpy(top, bot, stride);
         memcpy(bot, row.data(), stride);
+    }
+
+    // Release EGL context so eframe's GL context can be active
+    if (g_eglDisplay != EGL_NO_DISPLAY) {
+        eglMakeCurrent(g_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     }
 
     return 1;
