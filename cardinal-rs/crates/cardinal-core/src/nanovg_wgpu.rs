@@ -1,12 +1,14 @@
-//! Skeleton wgpu backend for NanoVG.
+//! wgpu backend for NanoVG.
 //!
-//! Provides the 12 `NVGparams` callbacks (currently stubs) and
+//! Provides the 12 `NVGparams` callbacks and
 //! `create_context` / `destroy_context` entry points.
 
 use std::collections::HashMap;
 use std::ffi::c_int;
 use std::ffi::c_void;
 use std::sync::Arc;
+
+use wgpu::util::DeviceExt;
 
 use crate::ffi;
 
@@ -26,17 +28,29 @@ pub struct TextureEntry {
 #[derive(Debug, Clone, Copy)]
 pub enum CallType {
     Fill,
+    ConvexFill,
     Stroke,
     Triangles,
 }
 
-/// Per-draw blend state (maps from NVGcompositeOperationState).
-#[derive(Debug, Clone, Copy, Default)]
+/// Per-draw blend state using wgpu blend factors.
+#[derive(Debug, Clone, Copy)]
 pub struct BlendState {
-    pub src_rgb: i32,
-    pub dst_rgb: i32,
-    pub src_alpha: i32,
-    pub dst_alpha: i32,
+    pub src_rgb: wgpu::BlendFactor,
+    pub dst_rgb: wgpu::BlendFactor,
+    pub src_alpha: wgpu::BlendFactor,
+    pub dst_alpha: wgpu::BlendFactor,
+}
+
+impl Default for BlendState {
+    fn default() -> Self {
+        Self {
+            src_rgb: wgpu::BlendFactor::One,
+            dst_rgb: wgpu::BlendFactor::OneMinusSrcAlpha,
+            src_alpha: wgpu::BlendFactor::One,
+            dst_alpha: wgpu::BlendFactor::OneMinusSrcAlpha,
+        }
+    }
 }
 
 /// Cached path vertex data for a draw call.
@@ -48,11 +62,31 @@ pub struct PathData {
     pub stroke_count: u32,
 }
 
-/// Fragment-shader uniform block (placeholder).
-#[derive(Debug, Clone, Copy, Default)]
+/// Fragment-shader uniform block — 11 vec4s = 176 bytes, matching the WGSL layout.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
 pub struct FragUniforms {
-    // Will be filled in Task 3 / Task 5.
-    pub _pad: [f32; 4],
+    pub scissor_mat: [f32; 12],       // 3 vec4s (mat3 rows, padded to vec4)
+    pub paint_mat: [f32; 12],         // 3 vec4s
+    pub inner_col: [f32; 4],          // vec4
+    pub outer_col: [f32; 4],          // vec4
+    pub scissor_ext_scale: [f32; 4],  // xy=scissorExt, zw=scissorScale
+    pub extent_radius_feather: [f32; 4], // xy=extent, z=radius, w=feather
+    pub stroke_params: [f32; 4],      // x=strokeMult, y=strokeThr, z=texType, w=type
+}
+
+impl Default for FragUniforms {
+    fn default() -> Self {
+        Self {
+            scissor_mat: [0.0; 12],
+            paint_mat: [0.0; 12],
+            inner_col: [0.0; 4],
+            outer_col: [0.0; 4],
+            scissor_ext_scale: [0.0; 4],
+            extent_radius_feather: [0.0; 4],
+            stroke_params: [0.0; 4],
+        }
+    }
 }
 
 /// A single batched draw call.
@@ -125,6 +159,16 @@ pub struct WgpuNvgContext {
 
     // Texture bind group cache (keyed by texture id)
     pub texture_bind_groups: HashMap<i32, wgpu::BindGroup>,
+
+    // Render target
+    pub render_target_view: Option<wgpu::TextureView>,
+    pub render_target_stencil: Option<wgpu::Texture>,
+    pub render_target_stencil_view: Option<wgpu::TextureView>,
+    pub render_target_width: u32,
+    pub render_target_height: u32,
+
+    // Frame state
+    pub first_pass_of_frame: bool,
 }
 
 impl WgpuNvgContext {
@@ -162,6 +206,12 @@ impl WgpuNvgContext {
             default_sampler: None,
             nearest_sampler: None,
             texture_bind_groups: HashMap::new(),
+            render_target_view: None,
+            render_target_stencil: None,
+            render_target_stencil_view: None,
+            render_target_width: 0,
+            render_target_height: 0,
+            first_pass_of_frame: true,
         }
     }
 }
@@ -335,7 +385,210 @@ fn stencil_face(
     }
 }
 
-// ── Callback stubs ───────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────
+
+fn convert_blend_factor(f: i32) -> wgpu::BlendFactor {
+    match f {
+        x if x == ffi::NVG_ZERO => wgpu::BlendFactor::Zero,
+        x if x == ffi::NVG_ONE => wgpu::BlendFactor::One,
+        x if x == ffi::NVG_SRC_COLOR => wgpu::BlendFactor::Src,
+        x if x == ffi::NVG_ONE_MINUS_SRC_COLOR => wgpu::BlendFactor::OneMinusSrc,
+        x if x == ffi::NVG_DST_COLOR => wgpu::BlendFactor::Dst,
+        x if x == ffi::NVG_ONE_MINUS_DST_COLOR => wgpu::BlendFactor::OneMinusDst,
+        x if x == ffi::NVG_SRC_ALPHA => wgpu::BlendFactor::SrcAlpha,
+        x if x == ffi::NVG_ONE_MINUS_SRC_ALPHA => wgpu::BlendFactor::OneMinusSrcAlpha,
+        x if x == ffi::NVG_DST_ALPHA => wgpu::BlendFactor::DstAlpha,
+        x if x == ffi::NVG_ONE_MINUS_DST_ALPHA => wgpu::BlendFactor::OneMinusDstAlpha,
+        x if x == ffi::NVG_SRC_ALPHA_SATURATE => wgpu::BlendFactor::SrcAlphaSaturated,
+        _ => wgpu::BlendFactor::One,
+    }
+}
+
+fn blend_composite_operation(op: &ffi::NVGcompositeOperationState) -> BlendState {
+    let b = BlendState {
+        src_rgb: convert_blend_factor(op.src_rgb),
+        dst_rgb: convert_blend_factor(op.dst_rgb),
+        src_alpha: convert_blend_factor(op.src_alpha),
+        dst_alpha: convert_blend_factor(op.dst_alpha),
+    };
+    // Fallback to premultiplied alpha if any factor is invalid (shouldn't happen with our mapping)
+    b
+}
+
+fn premul_color(c: &ffi::NVGcolor) -> [f32; 4] {
+    let r = c.rgba[0];
+    let g = c.rgba[1];
+    let b = c.rgba[2];
+    let a = c.rgba[3];
+    [r * a, g * a, b * a, a]
+}
+
+fn xform_to_mat3x4(dst: &mut [f32; 12], src: &[f32; 6]) {
+    dst[0] = src[0];
+    dst[1] = src[1];
+    dst[2] = 0.0;
+    dst[3] = 0.0;
+    dst[4] = src[2];
+    dst[5] = src[3];
+    dst[6] = 0.0;
+    dst[7] = 0.0;
+    dst[8] = src[4];
+    dst[9] = src[5];
+    dst[10] = 1.0;
+    dst[11] = 0.0;
+}
+
+fn convert_paint(
+    ctx: &WgpuNvgContext,
+    paint: &ffi::NVGpaint,
+    scissor: &ffi::NVGscissor,
+    width: f32,
+    fringe: f32,
+    stroke_thr: f32,
+) -> FragUniforms {
+    let mut frag = FragUniforms::default();
+
+    frag.inner_col = premul_color(&paint.inner_color);
+    frag.outer_col = premul_color(&paint.outer_color);
+
+    if scissor.extent[0] < -0.5 || scissor.extent[1] < -0.5 {
+        // Disable scissor
+        frag.scissor_ext_scale[0] = 1.0;
+        frag.scissor_ext_scale[1] = 1.0;
+        frag.scissor_ext_scale[2] = 1.0;
+        frag.scissor_ext_scale[3] = 1.0;
+    } else {
+        let mut inv_xform = [0.0f32; 6];
+        unsafe { ffi::nvgTransformInverse(inv_xform.as_mut_ptr(), scissor.xform.as_ptr()) };
+        xform_to_mat3x4(&mut frag.scissor_mat, &inv_xform);
+        frag.scissor_ext_scale[0] = scissor.extent[0];
+        frag.scissor_ext_scale[1] = scissor.extent[1];
+        frag.scissor_ext_scale[2] = (scissor.xform[0] * scissor.xform[0]
+            + scissor.xform[2] * scissor.xform[2])
+            .sqrt()
+            / fringe;
+        frag.scissor_ext_scale[3] = (scissor.xform[1] * scissor.xform[1]
+            + scissor.xform[3] * scissor.xform[3])
+            .sqrt()
+            / fringe;
+    }
+
+    frag.extent_radius_feather[0] = paint.extent[0];
+    frag.extent_radius_feather[1] = paint.extent[1];
+    frag.stroke_params[0] = (width * 0.5 + fringe * 0.5) / fringe;
+    frag.stroke_params[1] = stroke_thr;
+
+    let mut inv_xform = [0.0f32; 6];
+
+    if paint.image != 0 {
+        let tex = ctx.textures.get(&paint.image);
+        unsafe { ffi::nvgTransformInverse(inv_xform.as_mut_ptr(), paint.xform.as_ptr()) };
+        // type = FILLIMG = 1
+        frag.stroke_params[3] = 1.0;
+
+        if let Some(tex) = tex {
+            if tex.tex_type == ffi::NVG_TEXTURE_RGBA {
+                frag.stroke_params[2] =
+                    if (tex.flags & ffi::NVG_IMAGE_PREMULTIPLIED) != 0 { 0.0 } else { 1.0 };
+            } else {
+                frag.stroke_params[2] = 2.0;
+            }
+        }
+    } else {
+        // type = FILLGRAD = 0
+        frag.stroke_params[3] = 0.0;
+        frag.extent_radius_feather[2] = paint.radius;
+        frag.extent_radius_feather[3] = paint.feather;
+        unsafe { ffi::nvgTransformInverse(inv_xform.as_mut_ptr(), paint.xform.as_ptr()) };
+    }
+
+    xform_to_mat3x4(&mut frag.paint_mat, &inv_xform);
+
+    frag
+}
+
+/// Convert triangle fan vertices to triangle list.
+/// Fan [0,1,2,3,...,n] -> list [0,1,2, 0,2,3, 0,3,4, ...]
+fn fan_to_triangles(fan: &[ffi::NVGvertex]) -> Vec<ffi::NVGvertex> {
+    if fan.len() < 3 {
+        return Vec::new();
+    }
+    let mut out = Vec::with_capacity((fan.len() - 2) * 3);
+    for i in 2..fan.len() {
+        out.push(fan[0]);
+        out.push(fan[i - 1]);
+        out.push(fan[i]);
+    }
+    out
+}
+
+/// Convert triangle strip vertices to triangle list.
+/// Strip [0,1,2,3,...] -> list [0,1,2, 2,1,3, 2,3,4, 4,3,5, ...]
+fn strip_to_triangles(strip: &[ffi::NVGvertex]) -> Vec<ffi::NVGvertex> {
+    if strip.len() < 3 {
+        return Vec::new();
+    }
+    let mut out = Vec::with_capacity((strip.len() - 2) * 3);
+    for i in 2..strip.len() {
+        if i % 2 == 0 {
+            out.push(strip[i - 2]);
+            out.push(strip[i - 1]);
+            out.push(strip[i]);
+        } else {
+            out.push(strip[i - 1]);
+            out.push(strip[i - 2]);
+            out.push(strip[i]);
+        }
+    }
+    out
+}
+
+/// Set the render target for NanoVG rendering.
+/// Must be called before nvgBeginFrame.
+pub fn set_render_target(
+    ctx_ptr: *mut ffi::NVGcontext,
+    target_view: wgpu::TextureView,
+    width: u32,
+    height: u32,
+) {
+    if ctx_ptr.is_null() {
+        return;
+    }
+    let params = unsafe { ffi::nvgInternalParams(ctx_ptr) };
+    if params.is_null() {
+        return;
+    }
+    let uptr = unsafe { (*params).user_ptr };
+    let ctx = unsafe { ctx_from_uptr(uptr) };
+
+    // Recreate stencil texture if size changed
+    if ctx.render_target_width != width || ctx.render_target_height != height {
+        let stencil_texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("nvg_stencil_texture"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: STENCIL_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let stencil_view = stencil_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        ctx.render_target_stencil = Some(stencil_texture);
+        ctx.render_target_stencil_view = Some(stencil_view);
+        ctx.render_target_width = width;
+        ctx.render_target_height = height;
+    }
+
+    ctx.render_target_view = Some(target_view);
+    ctx.first_pass_of_frame = true;
+}
+
+// ── NVGparams callbacks ─────────────────────────────────────────────
 
 unsafe extern "C" fn render_create(uptr: *mut c_void, _other_uptr: *mut c_void) -> c_int {
     let ctx = unsafe { ctx_from_uptr(uptr) };
@@ -896,46 +1149,730 @@ unsafe extern "C" fn render_cancel(uptr: *mut c_void) {
     eprintln!("nanovg-wgpu: renderCancel (stub)");
 }
 
-unsafe extern "C" fn render_flush(_uptr: *mut c_void) {
-    eprintln!("nanovg-wgpu: renderFlush (stub)");
+unsafe extern "C" fn render_flush(uptr: *mut c_void) {
+    let ctx = unsafe { ctx_from_uptr(uptr) };
+
+    if ctx.draw_calls.is_empty() {
+        ctx.vertices.clear();
+        ctx.uniforms.clear();
+        return;
+    }
+
+    // Get raw pointers to avoid borrow issues with ensure_texture_bind_group
+    let render_target_view = match ctx.render_target_view.as_ref() {
+        Some(v) => v as *const wgpu::TextureView,
+        None => {
+            eprintln!("nanovg-wgpu: renderFlush — no render target set, skipping");
+            ctx.draw_calls.clear();
+            ctx.vertices.clear();
+            ctx.uniforms.clear();
+            return;
+        }
+    };
+    let render_target_view = unsafe { &*render_target_view };
+
+    // 1. Upload view uniforms
+    let view_data: [f32; 4] = [ctx.view_width, ctx.view_height, 0.0, 0.0];
+    ctx.queue.write_buffer(
+        ctx.view_uniform_buffer.as_ref().unwrap(),
+        0,
+        unsafe { std::slice::from_raw_parts(view_data.as_ptr() as *const u8, std::mem::size_of_val(&view_data)) },
+    );
+
+    // 2. Compute aligned frag uniform size
+    let align = ctx
+        .device
+        .limits()
+        .min_uniform_buffer_offset_alignment as usize;
+    let frag_size = std::mem::size_of::<FragUniforms>();
+    let aligned_frag_size = (frag_size + align - 1) & !(align - 1);
+
+    // 3. Build padded uniform buffer
+    let num_uniforms = ctx.uniforms.len();
+    let total_uniform_bytes = num_uniforms * aligned_frag_size;
+    let mut uniform_data = vec![0u8; total_uniform_bytes.max(aligned_frag_size)];
+    for (i, u) in ctx.uniforms.iter().enumerate() {
+        let offset = i * aligned_frag_size;
+        let src = unsafe {
+            std::slice::from_raw_parts(u as *const FragUniforms as *const u8, frag_size)
+        };
+        uniform_data[offset..offset + frag_size].copy_from_slice(src);
+    }
+
+    let frag_uniform_buffer = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("nvg_frag_uniform_buffer"),
+        contents: &uniform_data,
+        usage: wgpu::BufferUsages::UNIFORM,
+    });
+
+    // 4. Upload vertices
+    if ctx.vertices.is_empty() {
+        // Push a dummy vertex so we have a valid buffer
+        ctx.vertices.push(ffi::NVGvertex::default());
+    }
+    let vert_data = unsafe {
+        std::slice::from_raw_parts(
+            ctx.vertices.as_ptr() as *const u8,
+            ctx.vertices.len() * std::mem::size_of::<ffi::NVGvertex>(),
+        )
+    };
+    let vert_buf = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("nvg_vertex_buffer"),
+        contents: vert_data,
+        usage: wgpu::BufferUsages::VERTEX,
+    });
+
+    // 5. Create bind group with the real frag uniform buffer
+    let view_bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("nvg_view_bind_group_flush"),
+        layout: ctx.view_bind_group_layout.as_ref().unwrap(),
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: ctx.view_uniform_buffer.as_ref().unwrap().as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                    buffer: &frag_uniform_buffer,
+                    offset: 0,
+                    size: std::num::NonZeroU64::new(frag_size as u64),
+                }),
+            },
+        ],
+    });
+
+    // 6. Encode draw calls
+    let mut encoder = ctx
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("nvg_flush_encoder"),
+        });
+
+    // Take draw calls out so we can iterate while borrowing ctx for texture bind groups
+    let draw_calls = std::mem::take(&mut ctx.draw_calls);
+
+    let edge_anti_alias = ctx.flags & ffi::NVG_ANTIALIAS != 0;
+    let stencil_strokes = ctx.flags & ffi::NVG_STENCIL_STROKES != 0;
+
+    for call in &draw_calls {
+        let uniform_offset = (call.uniform_offset as usize * aligned_frag_size) as u32;
+
+        // Get texture bind group
+        let tex_bg = ctx.ensure_texture_bind_group(call.image);
+        // We need to work around the borrow checker: store a raw pointer
+        let tex_bg_ptr = tex_bg as *const wgpu::BindGroup;
+
+        match call.call_type {
+            CallType::Triangles => {
+                let color_load = if ctx.first_pass_of_frame {
+                    ctx.first_pass_of_frame = false;
+                    wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+                } else {
+                    wgpu::LoadOp::Load
+                };
+                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("nvg_triangles_pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: render_target_view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: color_load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                        depth_slice: None,
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                rpass.set_pipeline(ctx.pipeline_triangles.as_ref().unwrap());
+                rpass.set_vertex_buffer(0, vert_buf.slice(..));
+                rpass.set_bind_group(0, Some(&view_bind_group), &[uniform_offset]);
+                rpass.set_bind_group(1, Some(unsafe { &*tex_bg_ptr }), &[]);
+                rpass.draw(
+                    call.triangle_offset..call.triangle_offset + call.triangle_count,
+                    0..1,
+                );
+            }
+
+            CallType::ConvexFill => {
+                let color_load = if ctx.first_pass_of_frame {
+                    ctx.first_pass_of_frame = false;
+                    wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+                } else {
+                    wgpu::LoadOp::Load
+                };
+                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("nvg_convex_fill_pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: render_target_view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: color_load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                        depth_slice: None,
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                rpass.set_pipeline(ctx.pipeline_convex_fill.as_ref().unwrap());
+                rpass.set_vertex_buffer(0, vert_buf.slice(..));
+                rpass.set_bind_group(0, Some(&view_bind_group), &[uniform_offset]);
+                rpass.set_bind_group(1, Some(unsafe { &*tex_bg_ptr }), &[]);
+
+                for path in &call.paths {
+                    if path.fill_count > 0 {
+                        rpass.draw(
+                            path.fill_offset..path.fill_offset + path.fill_count,
+                            0..1,
+                        );
+                    }
+                    if path.stroke_count > 0 {
+                        rpass.draw(
+                            path.stroke_offset..path.stroke_offset + path.stroke_count,
+                            0..1,
+                        );
+                    }
+                }
+            }
+
+            CallType::Fill => {
+                let stencil_view = match ctx.render_target_stencil_view.as_ref() {
+                    Some(v) => v,
+                    None => continue,
+                };
+
+                let color_load = if ctx.first_pass_of_frame {
+                    ctx.first_pass_of_frame = false;
+                    wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+                } else {
+                    wgpu::LoadOp::Load
+                };
+
+                let second_uniform_offset =
+                    ((call.uniform_offset as usize + 1) * aligned_frag_size) as u32;
+
+                // Pass 1: Draw to stencil (no color write)
+                {
+                    let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("nvg_stencil_fill_stencil_pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: render_target_view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: color_load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                            depth_slice: None,
+                        })],
+                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: stencil_view,
+                            depth_ops: None,
+                            stencil_ops: Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(0),
+                                store: wgpu::StoreOp::Store,
+                            }),
+                        }),
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    multiview_mask: None,
+                    });
+                    rpass.set_pipeline(ctx.pipeline_stencil_fill_draw_stencil.as_ref().unwrap());
+                    rpass.set_vertex_buffer(0, vert_buf.slice(..));
+                    rpass.set_bind_group(0, Some(&view_bind_group), &[uniform_offset]);
+
+                    for path in &call.paths {
+                        if path.fill_count > 0 {
+                            rpass.draw(
+                                path.fill_offset..path.fill_offset + path.fill_count,
+                                0..1,
+                            );
+                        }
+                    }
+                }
+
+                // Pass 2: AA fringe
+                if edge_anti_alias {
+                    let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("nvg_stencil_fill_aa_pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: render_target_view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                            depth_slice: None,
+                        })],
+                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: stencil_view,
+                            depth_ops: None,
+                            stencil_ops: Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            }),
+                        }),
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    multiview_mask: None,
+                    });
+                    rpass.set_pipeline(ctx.pipeline_stencil_fill_draw_aa.as_ref().unwrap());
+                    rpass.set_vertex_buffer(0, vert_buf.slice(..));
+                    rpass.set_stencil_reference(0);
+                    rpass.set_bind_group(0, Some(&view_bind_group), &[second_uniform_offset]);
+                    rpass.set_bind_group(1, Some(unsafe { &*tex_bg_ptr }), &[]);
+
+                    for path in &call.paths {
+                        if path.stroke_count > 0 {
+                            rpass.draw(
+                                path.stroke_offset..path.stroke_offset + path.stroke_count,
+                                0..1,
+                            );
+                        }
+                    }
+                }
+
+                // Pass 3: Cover (fill where stencil != 0, reset stencil)
+                {
+                    let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("nvg_stencil_fill_cover_pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: render_target_view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                            depth_slice: None,
+                        })],
+                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: stencil_view,
+                            depth_ops: None,
+                            stencil_ops: Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            }),
+                        }),
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    multiview_mask: None,
+                    });
+                    rpass.set_pipeline(ctx.pipeline_stencil_fill_cover.as_ref().unwrap());
+                    rpass.set_vertex_buffer(0, vert_buf.slice(..));
+                    rpass.set_stencil_reference(0);
+                    rpass.set_bind_group(0, Some(&view_bind_group), &[second_uniform_offset]);
+                    rpass.set_bind_group(1, Some(unsafe { &*tex_bg_ptr }), &[]);
+                    rpass.draw(
+                        call.triangle_offset..call.triangle_offset + call.triangle_count,
+                        0..1,
+                    );
+                }
+            }
+
+            CallType::Stroke => {
+                if stencil_strokes {
+                    let stencil_view = match ctx.render_target_stencil_view.as_ref() {
+                        Some(v) => v,
+                        None => continue,
+                    };
+
+                    let color_load = if ctx.first_pass_of_frame {
+                        ctx.first_pass_of_frame = false;
+                        wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+                    } else {
+                        wgpu::LoadOp::Load
+                    };
+
+                    let second_uniform_offset =
+                        ((call.uniform_offset as usize + 1) * aligned_frag_size) as u32;
+
+                    // Pass 1: Fill stroke base (no overlap)
+                    {
+                        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("nvg_stencil_stroke_draw_pass"),
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view: render_target_view,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: color_load,
+                                    store: wgpu::StoreOp::Store,
+                                },
+                                depth_slice: None,
+                            })],
+                            depth_stencil_attachment: Some(
+                                wgpu::RenderPassDepthStencilAttachment {
+                                    view: stencil_view,
+                                    depth_ops: None,
+                                    stencil_ops: Some(wgpu::Operations {
+                                        load: wgpu::LoadOp::Clear(0),
+                                        store: wgpu::StoreOp::Store,
+                                    }),
+                                },
+                            ),
+                            timestamp_writes: None,
+                            occlusion_query_set: None,
+                    multiview_mask: None,
+                        });
+                        rpass.set_pipeline(ctx.pipeline_stencil_stroke_draw.as_ref().unwrap());
+                        rpass.set_vertex_buffer(0, vert_buf.slice(..));
+                        rpass.set_stencil_reference(0);
+                        rpass.set_bind_group(
+                            0,
+                            Some(&view_bind_group),
+                            &[second_uniform_offset],
+                        );
+                        rpass.set_bind_group(1, Some(unsafe { &*tex_bg_ptr }), &[]);
+
+                        for path in &call.paths {
+                            if path.stroke_count > 0 {
+                                rpass.draw(
+                                    path.stroke_offset
+                                        ..path.stroke_offset + path.stroke_count,
+                                    0..1,
+                                );
+                            }
+                        }
+                    }
+
+                    // Pass 2: AA
+                    {
+                        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("nvg_stencil_stroke_aa_pass"),
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view: render_target_view,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Load,
+                                    store: wgpu::StoreOp::Store,
+                                },
+                                depth_slice: None,
+                            })],
+                            depth_stencil_attachment: Some(
+                                wgpu::RenderPassDepthStencilAttachment {
+                                    view: stencil_view,
+                                    depth_ops: None,
+                                    stencil_ops: Some(wgpu::Operations {
+                                        load: wgpu::LoadOp::Load,
+                                        store: wgpu::StoreOp::Store,
+                                    }),
+                                },
+                            ),
+                            timestamp_writes: None,
+                            occlusion_query_set: None,
+                    multiview_mask: None,
+                        });
+                        rpass.set_pipeline(ctx.pipeline_stencil_stroke_aa.as_ref().unwrap());
+                        rpass.set_vertex_buffer(0, vert_buf.slice(..));
+                        rpass.set_bind_group(0, Some(&view_bind_group), &[uniform_offset]);
+                        rpass.set_bind_group(1, Some(unsafe { &*tex_bg_ptr }), &[]);
+
+                        for path in &call.paths {
+                            if path.stroke_count > 0 {
+                                rpass.draw(
+                                    path.stroke_offset
+                                        ..path.stroke_offset + path.stroke_count,
+                                    0..1,
+                                );
+                            }
+                        }
+                    }
+
+                    // Pass 3: Clear stencil
+                    {
+                        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("nvg_stencil_stroke_clear_pass"),
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view: render_target_view,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Load,
+                                    store: wgpu::StoreOp::Store,
+                                },
+                                depth_slice: None,
+                            })],
+                            depth_stencil_attachment: Some(
+                                wgpu::RenderPassDepthStencilAttachment {
+                                    view: stencil_view,
+                                    depth_ops: None,
+                                    stencil_ops: Some(wgpu::Operations {
+                                        load: wgpu::LoadOp::Load,
+                                        store: wgpu::StoreOp::Store,
+                                    }),
+                                },
+                            ),
+                            timestamp_writes: None,
+                            occlusion_query_set: None,
+                    multiview_mask: None,
+                        });
+                        rpass.set_pipeline(ctx.pipeline_stencil_stroke_clear.as_ref().unwrap());
+                        rpass.set_vertex_buffer(0, vert_buf.slice(..));
+
+                        for path in &call.paths {
+                            if path.stroke_count > 0 {
+                                rpass.draw(
+                                    path.stroke_offset
+                                        ..path.stroke_offset + path.stroke_count,
+                                    0..1,
+                                );
+                            }
+                        }
+                    }
+                } else {
+                    // Simple stroke (no stencil)
+                    let color_load = if ctx.first_pass_of_frame {
+                        ctx.first_pass_of_frame = false;
+                        wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+                    } else {
+                        wgpu::LoadOp::Load
+                    };
+                    let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("nvg_stroke_pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: render_target_view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: color_load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                            depth_slice: None,
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    multiview_mask: None,
+                    });
+                    rpass.set_pipeline(ctx.pipeline_stroke.as_ref().unwrap());
+                    rpass.set_vertex_buffer(0, vert_buf.slice(..));
+                    rpass.set_bind_group(0, Some(&view_bind_group), &[uniform_offset]);
+                    rpass.set_bind_group(1, Some(unsafe { &*tex_bg_ptr }), &[]);
+
+                    for path in &call.paths {
+                        if path.stroke_count > 0 {
+                            rpass.draw(
+                                path.stroke_offset..path.stroke_offset + path.stroke_count,
+                                0..1,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 7. Submit
+    ctx.queue.submit(std::iter::once(encoder.finish()));
+
+    // 8. Clear batched state
+    ctx.draw_calls.clear();
+    ctx.vertices.clear();
+    ctx.uniforms.clear();
 }
 
 unsafe extern "C" fn render_fill(
-    _uptr: *mut c_void,
-    _paint: *mut ffi::NVGpaint,
-    _composite_operation: ffi::NVGcompositeOperationState,
-    _scissor: *mut ffi::NVGscissor,
-    _fringe: f32,
-    _bounds: *const f32,
-    _paths: *const ffi::NVGpath,
-    _npaths: c_int,
+    uptr: *mut c_void,
+    paint: *mut ffi::NVGpaint,
+    composite_operation: ffi::NVGcompositeOperationState,
+    scissor: *mut ffi::NVGscissor,
+    fringe: f32,
+    bounds: *const f32,
+    paths: *const ffi::NVGpath,
+    npaths: c_int,
 ) {
-    eprintln!("nanovg-wgpu: renderFill (stub)");
+    let ctx = unsafe { ctx_from_uptr(uptr) };
+    let paint = unsafe { &*paint };
+    let scissor = unsafe { &*scissor };
+    let paths_slice = unsafe { std::slice::from_raw_parts(paths, npaths as usize) };
+
+    let is_convex = npaths == 1 && paths_slice[0].convex != 0;
+    let call_type = if is_convex {
+        CallType::ConvexFill
+    } else {
+        CallType::Fill
+    };
+
+    let blend = blend_composite_operation(&composite_operation);
+
+    let mut path_data = Vec::with_capacity(npaths as usize);
+
+    // Copy vertices, converting fan/strip to triangle list
+    for path in paths_slice {
+        let mut pd = PathData::default();
+
+        if path.nfill > 0 {
+            let fill_verts =
+                unsafe { std::slice::from_raw_parts(path.fill, path.nfill as usize) };
+            let triangles = fan_to_triangles(fill_verts);
+            if !triangles.is_empty() {
+                pd.fill_offset = ctx.vertices.len() as u32;
+                pd.fill_count = triangles.len() as u32;
+                ctx.vertices.extend_from_slice(&triangles);
+            }
+        }
+
+        if path.nstroke > 0 {
+            let stroke_verts =
+                unsafe { std::slice::from_raw_parts(path.stroke, path.nstroke as usize) };
+            let triangles = strip_to_triangles(stroke_verts);
+            if !triangles.is_empty() {
+                pd.stroke_offset = ctx.vertices.len() as u32;
+                pd.stroke_count = triangles.len() as u32;
+                ctx.vertices.extend_from_slice(&triangles);
+            }
+        }
+
+        path_data.push(pd);
+    }
+
+    let mut triangle_offset = 0u32;
+    let mut triangle_count = 0u32;
+
+    if !is_convex {
+        // Add bounding quad as 2 triangles for the cover pass
+        let b = unsafe { std::slice::from_raw_parts(bounds, 4) };
+        triangle_offset = ctx.vertices.len() as u32;
+        // bounds = [minx, miny, maxx, maxy]
+        // GL code: quad[0]=br, quad[1]=tr, quad[2]=bl, quad[3]=tl
+        // GL draws as TRIANGLE_STRIP: br,tr,bl,tl -> triangles: br,tr,bl + bl,tr,tl
+        let br = ffi::NVGvertex { x: b[2], y: b[3], u: 0.5, v: 1.0 };
+        let tr = ffi::NVGvertex { x: b[2], y: b[1], u: 0.5, v: 1.0 };
+        let bl = ffi::NVGvertex { x: b[0], y: b[3], u: 0.5, v: 1.0 };
+        let tl = ffi::NVGvertex { x: b[0], y: b[1], u: 0.5, v: 1.0 };
+        ctx.vertices.extend_from_slice(&[br, tr, bl, bl, tr, tl]);
+        triangle_count = 6;
+    }
+
+    // Setup uniforms
+    let uniform_offset = ctx.uniforms.len() as u32;
+    if !is_convex {
+        // Two uniforms: first = simple shader for stencil, second = fill shader
+        let mut simple = FragUniforms::default();
+        simple.stroke_params[1] = -1.0; // strokeThr = -1
+        simple.stroke_params[3] = 2.0; // type = SIMPLE
+        ctx.uniforms.push(simple);
+
+        let fill_frag = convert_paint(ctx, paint, scissor, fringe, fringe, -1.0);
+        ctx.uniforms.push(fill_frag);
+    } else {
+        let frag = convert_paint(ctx, paint, scissor, fringe, fringe, -1.0);
+        ctx.uniforms.push(frag);
+    }
+
+    ctx.draw_calls.push(DrawCall {
+        call_type,
+        blend,
+        image: paint.image,
+        paths: path_data,
+        triangle_offset,
+        triangle_count,
+        uniform_offset,
+        fringe,
+        stroke_width: 0.0,
+    });
 }
 
 unsafe extern "C" fn render_stroke(
-    _uptr: *mut c_void,
-    _paint: *mut ffi::NVGpaint,
-    _composite_operation: ffi::NVGcompositeOperationState,
-    _scissor: *mut ffi::NVGscissor,
-    _fringe: f32,
-    _stroke_width: f32,
-    _paths: *const ffi::NVGpath,
-    _npaths: c_int,
+    uptr: *mut c_void,
+    paint: *mut ffi::NVGpaint,
+    composite_operation: ffi::NVGcompositeOperationState,
+    scissor: *mut ffi::NVGscissor,
+    fringe: f32,
+    stroke_width: f32,
+    paths: *const ffi::NVGpath,
+    npaths: c_int,
 ) {
-    eprintln!("nanovg-wgpu: renderStroke (stub)");
+    let ctx = unsafe { ctx_from_uptr(uptr) };
+    let paint = unsafe { &*paint };
+    let scissor = unsafe { &*scissor };
+    let paths_slice = unsafe { std::slice::from_raw_parts(paths, npaths as usize) };
+
+    let blend = blend_composite_operation(&composite_operation);
+    let stencil_strokes = ctx.flags & ffi::NVG_STENCIL_STROKES != 0;
+
+    let mut path_data = Vec::with_capacity(npaths as usize);
+
+    for path in paths_slice {
+        let mut pd = PathData::default();
+        if path.nstroke > 0 {
+            let stroke_verts =
+                unsafe { std::slice::from_raw_parts(path.stroke, path.nstroke as usize) };
+            let triangles = strip_to_triangles(stroke_verts);
+            if !triangles.is_empty() {
+                pd.stroke_offset = ctx.vertices.len() as u32;
+                pd.stroke_count = triangles.len() as u32;
+                ctx.vertices.extend_from_slice(&triangles);
+            }
+        }
+        path_data.push(pd);
+    }
+
+    let uniform_offset = ctx.uniforms.len() as u32;
+
+    if stencil_strokes {
+        // Two uniforms: first with strokeThr=-1 (AA pass), second with strokeThr=1-0.5/255
+        let frag0 = convert_paint(ctx, paint, scissor, stroke_width, fringe, -1.0);
+        ctx.uniforms.push(frag0);
+        let frag1 =
+            convert_paint(ctx, paint, scissor, stroke_width, fringe, 1.0 - 0.5 / 255.0);
+        ctx.uniforms.push(frag1);
+    } else {
+        let frag = convert_paint(ctx, paint, scissor, stroke_width, fringe, -1.0);
+        ctx.uniforms.push(frag);
+    }
+
+    ctx.draw_calls.push(DrawCall {
+        call_type: CallType::Stroke,
+        blend,
+        image: paint.image,
+        paths: path_data,
+        triangle_offset: 0,
+        triangle_count: 0,
+        uniform_offset,
+        fringe,
+        stroke_width,
+    });
 }
 
 unsafe extern "C" fn render_triangles(
-    _uptr: *mut c_void,
-    _paint: *mut ffi::NVGpaint,
-    _composite_operation: ffi::NVGcompositeOperationState,
-    _scissor: *mut ffi::NVGscissor,
-    _verts: *const ffi::NVGvertex,
-    _nverts: c_int,
-    _fringe: f32,
+    uptr: *mut c_void,
+    paint: *mut ffi::NVGpaint,
+    composite_operation: ffi::NVGcompositeOperationState,
+    scissor: *mut ffi::NVGscissor,
+    verts: *const ffi::NVGvertex,
+    nverts: c_int,
+    fringe: f32,
 ) {
-    eprintln!("nanovg-wgpu: renderTriangles (stub)");
+    let ctx = unsafe { ctx_from_uptr(uptr) };
+    let paint = unsafe { &*paint };
+    let scissor = unsafe { &*scissor };
+    let verts_slice = unsafe { std::slice::from_raw_parts(verts, nverts as usize) };
+
+    let blend = blend_composite_operation(&composite_operation);
+
+    let triangle_offset = ctx.vertices.len() as u32;
+    ctx.vertices.extend_from_slice(verts_slice);
+    let triangle_count = nverts as u32;
+
+    let uniform_offset = ctx.uniforms.len() as u32;
+    let mut frag = convert_paint(ctx, paint, scissor, 1.0, fringe, -1.0);
+    frag.stroke_params[3] = 3.0; // type = IMG (shader for textured triangles)
+    ctx.uniforms.push(frag);
+
+    ctx.draw_calls.push(DrawCall {
+        call_type: CallType::Triangles,
+        blend,
+        image: paint.image,
+        paths: Vec::new(),
+        triangle_offset,
+        triangle_count,
+        uniform_offset,
+        fringe,
+        stroke_width: 0.0,
+    });
 }
 
 unsafe extern "C" fn render_delete(uptr: *mut c_void) {
