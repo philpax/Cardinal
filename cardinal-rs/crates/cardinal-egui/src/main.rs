@@ -152,6 +152,55 @@ enum DragState {
     },
 }
 
+use std::sync::mpsc;
+
+/// Render request sent to the render thread.
+struct RenderRequest {
+    module_id: ModuleId,
+    width: i32,
+    height: i32,
+}
+
+/// Render result sent back from the render thread.
+struct RenderResult {
+    module_id: ModuleId,
+    width: i32,
+    height: i32,
+    pixels: Vec<u8>,
+}
+
+fn spawn_render_thread() -> (mpsc::Sender<RenderRequest>, mpsc::Receiver<RenderResult>) {
+    let (req_tx, req_rx) = mpsc::channel::<RenderRequest>();
+    let (res_tx, res_rx) = mpsc::channel::<RenderResult>();
+
+    std::thread::Builder::new()
+        .name("cardinal-render".into())
+        .spawn(move || {
+            if !cc::render_claim_context() {
+                eprintln!("cardinal-render: failed to claim GL context");
+                return;
+            }
+            eprintln!("cardinal-render: GL context claimed, ready");
+
+            while let Ok(req) = req_rx.recv() {
+                if let Some((w, h, pixels)) = cc::module_render(req.module_id, req.width, req.height) {
+                    let _ = res_tx.send(RenderResult {
+                        module_id: req.module_id,
+                        width: w,
+                        height: h,
+                        pixels,
+                    });
+                }
+            }
+
+            cc::render_release_context();
+            eprintln!("cardinal-render: thread exiting");
+        })
+        .expect("failed to spawn render thread");
+
+    (req_tx, res_rx)
+}
+
 struct App {
     modules: Vec<PlacedModule>,
     cables: Vec<Cable>,
@@ -159,10 +208,13 @@ struct App {
     drag: Option<DragState>,
     frame_count: u64,
     browser_filter: String,
+    render_tx: mpsc::Sender<RenderRequest>,
+    render_rx: mpsc::Receiver<RenderResult>,
 }
 
 impl App {
     fn new() -> Self {
+        let (render_tx, render_rx) = spawn_render_thread();
         Self {
             modules: Vec::new(),
             cables: Vec::new(),
@@ -170,6 +222,8 @@ impl App {
             drag: None,
             frame_count: 0,
             browser_filter: String::new(),
+            render_tx,
+            render_rx,
         }
     }
 
@@ -232,24 +286,35 @@ impl App {
         None
     }
 
-    fn render_module_texture(&mut self, idx: usize, ctx: &egui::Context) {
+    fn request_render(&self, idx: usize) {
         let m = &self.modules[idx];
         let w = m.size.x as i32;
         let h = m.size.y as i32;
-        if w <= 0 || h <= 0 {
-            return;
+        if w > 0 && h > 0 {
+            let _ = self.render_tx.send(RenderRequest {
+                module_id: m.id,
+                width: w,
+                height: h,
+            });
         }
+    }
 
-        if let Some((rw, rh, pixels)) = cc::module_render(m.id, w, h) {
-            let image = egui::ColorImage::from_rgba_unmultiplied([rw as _, rh as _], &pixels);
-            let tex = ctx.load_texture(
-                format!("mod_{}", m.id.0),
-                image,
-                egui::TextureOptions::LINEAR,
-            );
-            self.modules[idx].texture = Some(tex);
+    fn poll_render_results(&mut self, ctx: &egui::Context) {
+        while let Ok(result) = self.render_rx.try_recv() {
+            if let Some(m) = self.modules.iter_mut().find(|m| m.id == result.module_id) {
+                let image = egui::ColorImage::from_rgba_unmultiplied(
+                    [result.width as _, result.height as _],
+                    &result.pixels,
+                );
+                let tex = ctx.load_texture(
+                    format!("mod_{}", result.module_id.0),
+                    image,
+                    egui::TextureOptions::LINEAR,
+                );
+                m.texture = Some(tex);
+                m.render_frame = self.frame_count;
+            }
         }
-        self.modules[idx].render_frame = self.frame_count;
     }
 }
 
@@ -257,15 +322,15 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.frame_count += 1;
 
-        // Re-render module textures periodically (every 30 frames for lights)
+        // Poll for completed renders from the render thread
+        self.poll_render_results(ctx);
+
+        // Request re-renders periodically (every 30 frames for lights/displays)
         let fc = self.frame_count;
-        let needs_render: Vec<usize> = (0..self.modules.len())
-            .filter(|&i| {
-                self.modules[i].texture.is_none() || fc - self.modules[i].render_frame > 30
-            })
-            .collect();
-        for idx in needs_render {
-            self.render_module_texture(idx, ctx);
+        for i in 0..self.modules.len() {
+            if self.modules[i].texture.is_none() || fc - self.modules[i].render_frame > 30 {
+                self.request_render(i);
+            }
         }
 
         // ── Side panel: Module Browser ───────────────────────────────

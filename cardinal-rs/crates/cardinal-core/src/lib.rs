@@ -210,6 +210,20 @@ pub fn module_render(id: ModuleId, max_width: i32, max_height: i32) -> Option<(i
     }
 }
 
+// ── Render context (for dedicated render thread) ────────────────────
+
+/// Make the offscreen EGL/NanoVG context current on the calling thread.
+/// Call once from a render thread before calling `module_render`.
+/// Returns true on success.
+pub fn render_claim_context() -> bool {
+    unsafe { ffi::cardinal_render_claim_context() != 0 }
+}
+
+/// Release the offscreen EGL/NanoVG context from the calling thread.
+pub fn render_release_context() {
+    unsafe { ffi::cardinal_render_release_context() }
+}
+
 // ── Audio I/O ────────────────────────────────────────────────────────
 
 /// Create the audio I/O terminal module.

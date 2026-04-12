@@ -94,6 +94,15 @@ ModuleHandle cardinal_audio_create(void);
 /// (into Rack) for the same block.
 void cardinal_audio_process(int frames, const float* input_buf, float* output_buf);
 
+// ── Render context (for use on a dedicated render thread) ────────────
+/// Make the offscreen EGL/NanoVG context current on the calling thread.
+/// Call this once from a render thread before calling cardinal_module_render.
+/// Returns 1 on success, 0 if no GL context is available.
+int cardinal_render_claim_context(void);
+
+/// Release the offscreen EGL/NanoVG context from the calling thread.
+void cardinal_render_release_context(void);
+
 // ── Engine stepping ──────────────────────────────────────────────────
 void cardinal_process(int frames);
 float cardinal_get_sample_rate(void);

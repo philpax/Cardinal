@@ -600,37 +600,19 @@ int cardinal_module_render(ModuleHandle h,
     *out_width = w;
     *out_height = h2;
 
-    // Save the caller's GL context (eframe/glutin) so we can restore it after
-    EGLDisplay prevDisplay = eglGetCurrentDisplay();
-    EGLSurface prevDrawSurface = eglGetCurrentSurface(EGL_DRAW);
-    EGLSurface prevReadSurface = eglGetCurrentSurface(EGL_READ);
-    EGLContext prevContext = eglGetCurrentContext();
+    // Caller must have claimed the render context first
+    // (via cardinal_render_claim_context on the render thread)
 
-    // Activate our EGL context for NanoVG rendering
-    if (!eglMakeCurrent(g_eglDisplay, g_eglSurface, g_eglSurface, g_eglContext)) {
-        fprintf(stderr, "cardinal: render: eglMakeCurrent failed\n");
-        return 0;
-    }
-
-    // Create FBO
     NVGLUframebuffer* fbo = nvgluCreateFramebuffer(g_vg, w, h2, 0);
-    if (!fbo) {
-        fprintf(stderr, "cardinal: render: FBO creation failed (%dx%d)\n", w, h2);
-        // Restore caller's context
-        if (prevDisplay != EGL_NO_DISPLAY)
-            eglMakeCurrent(prevDisplay, prevDrawSurface, prevReadSurface, prevContext);
-        return 0;
-    }
+    if (!fbo) return 0;
 
     nvgluBindFramebuffer(fbo);
     glViewport(0, 0, w, h2);
     glClearColor(0, 0, 0, 0);
     glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-    // Begin NanoVG frame
     nvgBeginFrame(g_vg, w, h2, 1.0f);
 
-    // Draw the module widget
     rack::widget::Widget::DrawArgs args;
     args.vg = g_vg;
     args.clipBox = rack::math::Rect(rack::math::Vec(0, 0),
@@ -638,18 +620,16 @@ int cardinal_module_render(ModuleHandle h,
     args.fb = nullptr;
 
     widget->draw(args);
-    // Also draw layer 1 (lights/halos)
     widget->drawLayer(args, 1);
 
     nvgEndFrame(g_vg);
 
-    // Read pixels back
     glReadPixels(0, 0, w, h2, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
     nvgluBindFramebuffer(nullptr);
     nvgluDeleteFramebuffer(fbo);
 
-    // OpenGL returns pixels bottom-up; flip vertically
+    // Flip vertically (OpenGL is bottom-up)
     int stride = w * 4;
     std::vector<unsigned char> row(stride);
     for (int y = 0; y < h2 / 2; y++) {
@@ -660,14 +640,25 @@ int cardinal_module_render(ModuleHandle h,
         memcpy(bot, row.data(), stride);
     }
 
-    // Restore the caller's GL context (eframe/glutin)
-    if (prevDisplay != EGL_NO_DISPLAY) {
-        eglMakeCurrent(prevDisplay, prevDrawSurface, prevReadSurface, prevContext);
-    } else {
+    return 1;
+}
+
+// ── Render context ──────────────────────────────────────────────────
+
+int cardinal_render_claim_context(void) {
+    if (g_eglDisplay == EGL_NO_DISPLAY || g_eglContext == EGL_NO_CONTEXT)
+        return 0;
+    if (!eglMakeCurrent(g_eglDisplay, g_eglSurface, g_eglSurface, g_eglContext)) {
+        fprintf(stderr, "cardinal: render_claim_context failed\n");
+        return 0;
+    }
+    return 1;
+}
+
+void cardinal_render_release_context(void) {
+    if (g_eglDisplay != EGL_NO_DISPLAY) {
         eglMakeCurrent(g_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     }
-
-    return 1;
 }
 
 // ── Cable management ─────────────────────────────────────────────────
