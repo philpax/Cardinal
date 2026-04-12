@@ -26,6 +26,7 @@
 #include <system.hpp>
 #include <window/Window.hpp>
 #include <app/Scene.hpp>
+#include <widget/event.hpp>
 
 #include <cstring>
 #include <unordered_map>
@@ -166,6 +167,9 @@ int cardinal_init(float sample_rate, const char* resource_dir) {
     // Our stub Scene just creates a RackWidget so the access path is valid.
     fprintf(stderr, "cardinal: [init] creating Scene...\n");
     g_context->scene = new rack::app::Scene();
+
+    // Create EventState — Widget::removeChild calls APP->event->finalizeWidget.
+    g_context->event = new rack::widget::EventState();
 
     // Plugin registration is deferred to Rust side
 

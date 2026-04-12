@@ -1147,7 +1147,7 @@ unsafe extern "C" fn render_create_texture(
             flags: image_flags,
         },
     );
-    eprintln!("nanovg-wgpu: renderCreateTexture id={id} {w}x{h} type={tex_type} mips={mip_level_count}");
+    // eprintln!("nanovg-wgpu: renderCreateTexture id={id} {w}x{h} type={tex_type} mips={mip_level_count}");
     id
 }
 
@@ -1155,7 +1155,7 @@ unsafe extern "C" fn render_delete_texture(uptr: *mut c_void, image: c_int) -> c
     let ctx = unsafe { ctx_from_uptr(uptr) };
     ctx.texture_bind_groups.remove(&image);
     if ctx.textures.remove(&image).is_some() {
-        eprintln!("nanovg-wgpu: renderDeleteTexture id={image}");
+        // eprintln!("nanovg-wgpu: renderDeleteTexture id={image}");
         1
     } else {
         0
@@ -1218,7 +1218,7 @@ unsafe extern "C" fn render_update_texture(
     // Invalidate cached bind group since texture content changed
     ctx.texture_bind_groups.remove(&image);
 
-    eprintln!("nanovg-wgpu: renderUpdateTexture id={image} region=({x},{y},{w},{h})");
+    // eprintln!("nanovg-wgpu: renderUpdateTexture id={image} region=({x},{y},{w},{h})");
     1
 }
 
@@ -1247,7 +1247,7 @@ unsafe extern "C" fn render_viewport(uptr: *mut c_void, width: f32, height: f32,
     ctx.view_width = width;
     ctx.view_height = height;
     ctx.device_pixel_ratio = device_pixel_ratio;
-    eprintln!("nanovg-wgpu: renderViewport {width}x{height} dpr={device_pixel_ratio}");
+    // eprintln!("nanovg-wgpu: renderViewport {width}x{height} dpr={device_pixel_ratio}");
 }
 
 unsafe extern "C" fn render_cancel(uptr: *mut c_void) {
@@ -1255,7 +1255,7 @@ unsafe extern "C" fn render_cancel(uptr: *mut c_void) {
     ctx.draw_calls.clear();
     ctx.vertices.clear();
     ctx.uniforms.clear();
-    eprintln!("nanovg-wgpu: renderCancel (stub)");
+    // eprintln!("nanovg-wgpu: renderCancel");
 }
 
 unsafe extern "C" fn render_flush(uptr: *mut c_void) {
