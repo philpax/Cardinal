@@ -265,11 +265,22 @@ int cardinal_init(float sample_rate, const char* resource_dir) {
     // Create user_data dir if missing
     rack::system::createDirectories(rack::asset::userDir);
 
-    // During init, we're headless — EGL/NanoVG is created on the render
-    // thread later via cardinal_render_claim_context(). Fonts and images
-    // will be loaded lazily during the first render.
-    rack::settings::headless = true;
+    rack::settings::headless = false;
     rack::settings::devMode = true;
+
+    // Init EGL + NanoVG on this thread (the Cardinal thread owns GL for its lifetime)
+    fprintf(stderr, "cardinal: [init] EGL...\n");
+    if (!initEGL()) {
+        fprintf(stderr, "cardinal: EGL init failed, falling back to headless\n");
+        rack::settings::headless = true;
+    }
+    if (!rack::settings::headless) {
+        fprintf(stderr, "cardinal: [init] NanoVG...\n");
+        if (!initNanoVG()) {
+            fprintf(stderr, "cardinal: NanoVG init failed, falling back to headless\n");
+            rack::settings::headless = true;
+        }
+    }
 
     // Create context
     fprintf(stderr, "cardinal: [init] creating Context...\n");
@@ -282,20 +293,21 @@ int cardinal_init(float sample_rate, const char* resource_dir) {
     g_context->engine = g_engine;
     g_engine->setSampleRate(sample_rate);
 
-    // Create a Window so APP->window is never null.
-    // Plugin code (Font::load, Image::load, Svg::load) accesses APP->window.
-    // vg starts null (headless) — fonts/images return nullptr during init,
-    // but will load properly once the render thread wires up NanoVG.
+    // Create Window — plugin code accesses APP->window for font/image loading
     fprintf(stderr, "cardinal: [init] creating Window...\n");
     auto* window = new rack::window::Window();
     g_context->window = window;
+    if (!rack::settings::headless) {
+        window->vg = g_vg;
+        window->fbVg = g_fbVg;
+    }
 
     // Plugin registration is deferred to Rust side
-    // (cardinal_plugins_registry::register_all_plugins() called from cardinal_core::init())
 
-    fprintf(stderr, "cardinal: [init] done — %d plugins, %d models\n",
+    fprintf(stderr, "cardinal: [init] done — %d plugins, %d models (headless=%d)\n",
             (int)rack::plugin::plugins.size(),
-            cardinal_catalog_count());
+            cardinal_catalog_count(),
+            (int)rack::settings::headless);
 
     return 0;
 }
@@ -619,40 +631,10 @@ int cardinal_module_render(ModuleHandle h,
 // ── Render context ──────────────────────────────────────────────────
 
 int cardinal_render_claim_context(void) {
-    // Create EGL + NanoVG on this thread (the render thread).
-    // This avoids cross-thread context migration which some drivers
-    // (e.g. Mesa swrast) don't support.
-
-    if (g_eglDisplay != EGL_NO_DISPLAY) {
-        // Already initialized — just make current
-        if (!eglMakeCurrent(g_eglDisplay, g_eglSurface, g_eglSurface, g_eglContext)) {
-            fprintf(stderr, "cardinal: render_claim_context: eglMakeCurrent failed\n");
-            return 0;
-        }
-    } else {
-        // Create EGL + GLEW + NanoVG from scratch on this thread
-        if (!initEGL()) {
-            fprintf(stderr, "cardinal: render_claim_context: EGL init failed\n");
-            return 0;
-        }
-        if (!initNanoVG()) {
-            fprintf(stderr, "cardinal: render_claim_context: NanoVG init failed\n");
-            return 0;
-        }
-    }
-
-    // Wire NanoVG into the Window so Font::load / Image::load work
-    // when widgets call them during draw()
-    if (g_context && g_context->window) {
-        g_context->window->vg = g_vg;
-        g_context->window->fbVg = g_fbVg;
-    }
-
-    // Set the Rack context for this thread (thread-local)
+    // Set the Rack context for the calling thread (thread-local).
+    // EGL/NanoVG are already initialized on the Cardinal thread.
+    if (!g_context || !g_vg) return 0;
     rack::contextSet(g_context);
-
-    rack::settings::headless = false;
-    fprintf(stderr, "cardinal: render_claim_context: OK (GL on render thread)\n");
     return 1;
 }
 

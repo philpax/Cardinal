@@ -1,32 +1,135 @@
 use cardinal_core::{self as cc, CableId, ModuleId};
 use eframe::egui;
+use std::sync::mpsc;
 
-fn main() -> eframe::Result {
-    let sample_rate = cpal_sample_rate().unwrap_or(48000.0);
-    eprintln!("Audio sample rate: {sample_rate} Hz");
+// ── Messages between UI and Cardinal thread ─────────────────────────
 
-    let resource_dir = cc::default_resource_dir();
-    cc::init(sample_rate, &resource_dir);
+enum Command {
+    CreateModule {
+        plugin: String,
+        model: String,
+        reply: mpsc::Sender<Option<ModuleInfo>>,
+    },
+    DestroyModule(ModuleId),
+    CreateCable {
+        out_mod: ModuleId,
+        out_port: i32,
+        in_mod: ModuleId,
+        in_port: i32,
+        reply: mpsc::Sender<Option<CableId>>,
+    },
+    SetParam {
+        module: ModuleId,
+        param_id: i32,
+        value: f32,
+    },
+    RenderModule {
+        module_id: ModuleId,
+        width: i32,
+        height: i32,
+    },
+    CreateAudio,
+    GetCatalog(mpsc::Sender<Vec<cc::CatalogEntry>>),
+}
 
-    let audio_id = cc::audio_create();
-    if audio_id.is_none() {
-        eprintln!("Warning: failed to create audio I/O module");
-    }
+struct ModuleInfo {
+    id: ModuleId,
+    size: (f32, f32),
+    inputs: Vec<cc::PortInfo>,
+    outputs: Vec<cc::PortInfo>,
+    params: Vec<cc::ParamInfo>,
+}
 
-    let _audio_stream = start_audio_stream();
+struct RenderResult {
+    module_id: ModuleId,
+    width: i32,
+    height: i32,
+    pixels: Vec<u8>,
+}
 
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1400.0, 800.0])
-            .with_title("Cardinal"),
-        ..Default::default()
-    };
+// ── Cardinal thread ─────────────────────────────────────────────────
 
-    eframe::run_native(
-        "cardinal-egui",
-        options,
-        Box::new(|_cc| Ok(Box::new(App::new()))),
-    )
+fn spawn_cardinal_thread(
+    sample_rate: f32,
+) -> (mpsc::Sender<Command>, mpsc::Receiver<RenderResult>) {
+    let (cmd_tx, cmd_rx) = mpsc::channel::<Command>();
+    let (render_tx, render_rx) = mpsc::channel::<RenderResult>();
+
+    std::thread::Builder::new()
+        .name("cardinal".into())
+        .spawn(move || {
+            // All Cardinal state lives on this thread
+            let resource_dir = cc::default_resource_dir();
+            cc::init(sample_rate, &resource_dir);
+            cc::render_claim_context();
+
+            eprintln!("cardinal thread: ready");
+
+            while let Ok(cmd) = cmd_rx.recv() {
+                match cmd {
+                    Command::CreateModule {
+                        plugin,
+                        model,
+                        reply,
+                    } => {
+                        let info = cc::module_create(&plugin, &model).map(|id| {
+                            let (w, h) = cc::module_size(id);
+                            ModuleInfo {
+                                id,
+                                size: (w.max(90.0), h.max(200.0)),
+                                inputs: cc::module_inputs(id),
+                                outputs: cc::module_outputs(id),
+                                params: cc::module_params(id),
+                            }
+                        });
+                        let _ = reply.send(info);
+                    }
+                    Command::DestroyModule(id) => {
+                        cc::module_destroy(id);
+                    }
+                    Command::CreateCable {
+                        out_mod,
+                        out_port,
+                        in_mod,
+                        in_port,
+                        reply,
+                    } => {
+                        let id = cc::cable_create(out_mod, out_port, in_mod, in_port);
+                        let _ = reply.send(id);
+                    }
+                    Command::SetParam {
+                        module,
+                        param_id,
+                        value,
+                    } => {
+                        cc::module_set_param(module, param_id, value);
+                    }
+                    Command::RenderModule {
+                        module_id,
+                        width,
+                        height,
+                    } => {
+                        if let Some((w, h, pixels)) = cc::module_render(module_id, width, height) {
+                            let _ = render_tx.send(RenderResult {
+                                module_id,
+                                width: w,
+                                height: h,
+                                pixels,
+                            });
+                        }
+                    }
+                    Command::CreateAudio => {
+                        cc::audio_create();
+                    }
+                    Command::GetCatalog(reply) => {
+                        let _ = reply.send(cc::catalog());
+                    }
+                }
+            }
+        })
+        .expect("failed to spawn cardinal thread");
+
+    (cmd_tx, render_rx)
 }
 
 // ── Audio backend (cpal) ─────────────────────────────────────────────
@@ -55,22 +158,20 @@ fn start_audio_stream() -> Option<cpal::Stream> {
     let sample_rate = config.sample_rate().0;
 
     let stream = match config.sample_format() {
-        cpal::SampleFormat::F32 => {
-            device
-                .build_output_stream(
-                    &cpal::StreamConfig {
-                        channels: channels as u16,
-                        sample_rate: cpal::SampleRate(sample_rate),
-                        buffer_size: cpal::BufferSize::Default,
-                    },
-                    move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                        audio_callback(data, channels);
-                    },
-                    |err| eprintln!("Audio stream error: {err}"),
-                    None,
-                )
-                .ok()?
-        }
+        cpal::SampleFormat::F32 => device
+            .build_output_stream(
+                &cpal::StreamConfig {
+                    channels: channels as u16,
+                    sample_rate: cpal::SampleRate(sample_rate),
+                    buffer_size: cpal::BufferSize::Default,
+                },
+                move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                    audio_callback(data, channels);
+                },
+                |err| eprintln!("Audio stream error: {err}"),
+                None,
+            )
+            .ok()?,
         _ => {
             eprintln!("Unsupported sample format: {:?}", config.sample_format());
             return None;
@@ -88,6 +189,7 @@ fn audio_callback(output: &mut [f32], channels: usize) {
     let frames = frames.min(MAX);
     let mut stereo_buf = [0.0f32; MAX * 2];
 
+    // audio_process calls engine->stepBlock which has internal locking
     cc::audio_process(frames, None, &mut stereo_buf[..frames * 2]);
 
     for i in 0..frames {
@@ -121,7 +223,6 @@ struct PlacedModule {
     outputs: Vec<cc::PortInfo>,
     params: Vec<cc::ParamInfo>,
     texture: Option<egui::TextureHandle>,
-    render_frame: u64,
 }
 
 struct Cable {
@@ -152,103 +253,56 @@ enum DragState {
     },
 }
 
-use std::sync::mpsc;
-
-/// Render request sent to the render thread.
-struct RenderRequest {
-    module_id: ModuleId,
-    width: i32,
-    height: i32,
-}
-
-/// Render result sent back from the render thread.
-struct RenderResult {
-    module_id: ModuleId,
-    width: i32,
-    height: i32,
-    pixels: Vec<u8>,
-}
-
-fn spawn_render_thread() -> (mpsc::Sender<RenderRequest>, mpsc::Receiver<RenderResult>) {
-    let (req_tx, req_rx) = mpsc::channel::<RenderRequest>();
-    let (res_tx, res_rx) = mpsc::channel::<RenderResult>();
-
-    std::thread::Builder::new()
-        .name("cardinal-render".into())
-        .spawn(move || {
-            if !cc::render_claim_context() {
-                eprintln!("cardinal-render: failed to claim GL context");
-                return;
-            }
-            eprintln!("cardinal-render: GL context claimed, ready");
-
-            while let Ok(req) = req_rx.recv() {
-                if let Some((w, h, pixels)) = cc::module_render(req.module_id, req.width, req.height) {
-                    let _ = res_tx.send(RenderResult {
-                        module_id: req.module_id,
-                        width: w,
-                        height: h,
-                        pixels,
-                    });
-                }
-            }
-
-            cc::render_release_context();
-            eprintln!("cardinal-render: thread exiting");
-        })
-        .expect("failed to spawn render thread");
-
-    (req_tx, res_rx)
-}
-
 struct App {
     modules: Vec<PlacedModule>,
     cables: Vec<Cable>,
     catalog: Vec<cc::CatalogEntry>,
     drag: Option<DragState>,
-    frame_count: u64,
     browser_filter: String,
-    render_tx: mpsc::Sender<RenderRequest>,
+    cmd_tx: mpsc::Sender<Command>,
     render_rx: mpsc::Receiver<RenderResult>,
 }
 
 impl App {
-    fn new() -> Self {
-        let (render_tx, render_rx) = spawn_render_thread();
+    fn new(cmd_tx: mpsc::Sender<Command>, render_rx: mpsc::Receiver<RenderResult>) -> Self {
+        // Request catalog from Cardinal thread
+        let (cat_tx, cat_rx) = mpsc::channel();
+        cmd_tx.send(Command::GetCatalog(cat_tx)).unwrap();
+        let catalog = cat_rx.recv().unwrap_or_default();
+
         Self {
             modules: Vec::new(),
             cables: Vec::new(),
-            catalog: cc::catalog(),
+            catalog,
             drag: None,
-            frame_count: 0,
             browser_filter: String::new(),
-            render_tx,
+            cmd_tx,
             render_rx,
         }
     }
 
     fn spawn_module(&mut self, plugin: &str, model: &str, pos: egui::Pos2) {
-        if let Some(id) = cc::module_create(plugin, model) {
-            let (w, h) = cc::module_size(id);
-            let inputs = cc::module_inputs(id);
-            let outputs = cc::module_outputs(id);
-            let params = cc::module_params(id);
+        let (reply_tx, reply_rx) = mpsc::channel();
+        let _ = self.cmd_tx.send(Command::CreateModule {
+            plugin: plugin.to_string(),
+            model: model.to_string(),
+            reply: reply_tx,
+        });
+        if let Ok(Some(info)) = reply_rx.recv() {
             let name = self
                 .catalog
                 .iter()
                 .find(|e| e.plugin_slug == plugin && e.model_slug == model)
                 .map_or(model.to_string(), |e| e.model_name.clone());
-
             self.modules.push(PlacedModule {
-                id,
+                id: info.id,
                 name,
                 pos,
-                size: egui::vec2(w.max(90.0), h.max(200.0)),
-                inputs,
-                outputs,
-                params,
+                size: egui::vec2(info.size.0, info.size.1),
+                inputs: info.inputs,
+                outputs: info.outputs,
+                params: info.params,
                 texture: None,
-                render_frame: 0,
             });
         }
     }
@@ -286,15 +340,12 @@ impl App {
         None
     }
 
-    fn request_render(&self, idx: usize) {
-        let m = &self.modules[idx];
-        let w = m.size.x as i32;
-        let h = m.size.y as i32;
-        if w > 0 && h > 0 {
-            let _ = self.render_tx.send(RenderRequest {
+    fn request_renders(&self) {
+        for m in &self.modules {
+            let _ = self.cmd_tx.send(Command::RenderModule {
                 module_id: m.id,
-                width: w,
-                height: h,
+                width: m.size.x as i32,
+                height: m.size.y as i32,
             });
         }
     }
@@ -306,13 +357,11 @@ impl App {
                     [result.width as _, result.height as _],
                     &result.pixels,
                 );
-                let tex = ctx.load_texture(
+                m.texture = Some(ctx.load_texture(
                     format!("mod_{}", result.module_id.0),
                     image,
                     egui::TextureOptions::LINEAR,
-                );
-                m.texture = Some(tex);
-                m.render_frame = self.frame_count;
+                ));
             }
         }
     }
@@ -320,15 +369,8 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.frame_count += 1;
-
-        // Poll for completed renders from the render thread
         self.poll_render_results(ctx);
-
-        // Request re-renders every frame (async — doesn't block the UI)
-        for i in 0..self.modules.len() {
-            self.request_render(i);
-        }
+        self.request_renders();
 
         // ── Side panel: Module Browser ───────────────────────────────
         egui::SidePanel::left("browser")
@@ -344,7 +386,7 @@ impl eframe::App for App {
                 ui.separator();
 
                 ui.label(
-                    egui::RichText::new("Click a module to add it to the rack")
+                    egui::RichText::new("Click to add | Drag ports to cable | Drag knobs up/down")
                         .small()
                         .weak(),
                 );
@@ -379,30 +421,28 @@ impl eframe::App for App {
                         {
                             let x = 220.0 + self.modules.len() as f32 * 20.0;
                             let y = 50.0 + (self.modules.len() % 3) as f32 * 120.0;
-                            self.spawn_module(&entry.plugin_slug, &entry.model_slug, egui::pos2(x, y));
+                            self.spawn_module(
+                                &entry.plugin_slug,
+                                &entry.model_slug,
+                                egui::pos2(x, y),
+                            );
                         }
                     }
                 });
 
                 ui.separator();
-                ui.heading("Status");
-                ui.label(format!("Modules: {}", self.modules.len()));
-                ui.label(format!("Cables: {}", self.cables.len()));
-                ui.label(format!("SR: {} Hz", cc::sample_rate()));
-
-                ui.add_space(8.0);
-                ui.separator();
-                ui.label(egui::RichText::new("Controls").strong());
-                ui.label(egui::RichText::new("Drag module body to move").small());
-                ui.label(egui::RichText::new("Drag from port to port to cable").small());
-                ui.label(egui::RichText::new("Drag knob up/down to adjust").small());
+                ui.label(format!(
+                    "Modules: {} | Cables: {} | SR: {} Hz",
+                    self.modules.len(),
+                    self.cables.len(),
+                    cc::sample_rate(),
+                ));
             });
 
         // ── Central panel: Rack ──────────────────────────────────────
         egui::CentralPanel::default().show(ctx, |ui| {
             let rect = ui.max_rect();
 
-            // Allocate rects for each module
             let mut responses: Vec<(usize, egui::Response)> = Vec::new();
             for (idx, m) in self.modules.iter().enumerate() {
                 let module_rect = egui::Rect::from_min_size(m.pos, m.size);
@@ -412,13 +452,11 @@ impl eframe::App for App {
                 }
             }
 
-            // Handle interactions
             let mut drag_completed: Option<(ModuleId, i32, bool, egui::Pos2)> = None;
 
             for (idx, response) in &responses {
                 if response.drag_started() {
                     if let Some(pos) = response.interact_pointer_pos() {
-                        // Check knob first
                         if let Some((knob_idx, param)) = self.find_knob_at(pos) {
                             let val = cc::module_get_param(self.modules[knob_idx].id, param.id);
                             self.drag = Some(DragState::Knob {
@@ -429,18 +467,14 @@ impl eframe::App for App {
                                 min: param.min,
                                 max: param.max,
                             });
-                        }
-                        // Then port
-                        else if let Some((mid, pid, is_out)) = self.find_port_at(pos) {
+                        } else if let Some((mid, pid, is_out)) = self.find_port_at(pos) {
                             self.drag = Some(DragState::Cable {
                                 from_module: mid,
                                 from_port: pid,
                                 is_output: is_out,
                                 mouse_pos: pos,
                             });
-                        }
-                        // Otherwise move module
-                        else {
+                        } else {
                             self.drag = Some(DragState::Module { module_idx: *idx });
                         }
                     }
@@ -462,15 +496,15 @@ impl eframe::App for App {
                             max,
                         }) => {
                             if let Some(pos) = response.interact_pointer_pos() {
-                                let dy = *start_y - pos.y; // up = increase
+                                let dy = *start_y - pos.y;
                                 let range = *max - *min;
                                 let sensitivity = range / 200.0;
                                 let new_val = (*start_value + dy * sensitivity).clamp(*min, *max);
-                                cc::module_set_param(
-                                    self.modules[*module_idx].id,
-                                    *param_id,
-                                    new_val,
-                                );
+                                let _ = self.cmd_tx.send(Command::SetParam {
+                                    module: self.modules[*module_idx].id,
+                                    param_id: *param_id,
+                                    value: new_val,
+                                });
                             }
                         }
                         Some(DragState::Module { module_idx }) => {
@@ -498,18 +532,15 @@ impl eframe::App for App {
                     }
                 }
 
-                // Double-click to remove module
                 if response.double_clicked() {
                     let mid = self.modules[*idx].id;
-                    // Remove cables connected to this module
                     self.cables.retain(|c| c.out_module != mid && c.in_module != mid);
-                    cc::module_destroy(mid);
+                    let _ = self.cmd_tx.send(Command::DestroyModule(mid));
                     self.modules.remove(*idx);
-                    break; // indices invalidated
+                    break;
                 }
             }
 
-            // Complete cable connection
             if let Some((from_mod, from_port, is_output, end_pos)) = drag_completed {
                 if let Some((to_mod, to_port, to_is_output)) = self.find_port_at(end_pos) {
                     let (om, op, im, ip) = if is_output && !to_is_output {
@@ -520,7 +551,15 @@ impl eframe::App for App {
                         (from_mod, -1, to_mod, -1)
                     };
                     if op >= 0 && ip >= 0 {
-                        if let Some(cid) = cc::cable_create(om, op, im, ip) {
+                        let (reply_tx, reply_rx) = mpsc::channel();
+                        let _ = self.cmd_tx.send(Command::CreateCable {
+                            out_mod: om,
+                            out_port: op,
+                            in_mod: im,
+                            in_port: ip,
+                            reply: reply_tx,
+                        });
+                        if let Ok(Some(cid)) = reply_rx.recv() {
                             self.cables.push(Cable {
                                 _id: cid,
                                 out_module: om,
@@ -537,7 +576,7 @@ impl eframe::App for App {
             let painter = ui.painter();
             painter.rect_filled(rect, 0.0, egui::Color32::from_rgb(30, 30, 35));
 
-            // Draw cables
+            // Cables
             for cable in &self.cables {
                 let om = self.modules.iter().find(|m| m.id == cable.out_module);
                 let im = self.modules.iter().find(|m| m.id == cable.in_module);
@@ -547,17 +586,7 @@ impl eframe::App for App {
                     if let (Some(op), Some(ip)) = (op, ip) {
                         let p1 = Self::port_world_pos(om, op);
                         let p2 = Self::port_world_pos(im, ip);
-
-                        let v = cc::module_get_output_voltage(cable.out_module, cable.out_port);
-                        let intensity = (v.abs() / 5.0).clamp(0.0, 1.0);
-                        let color = egui::Color32::from_rgb(
-                            (100.0 + 155.0 * intensity) as u8,
-                            (200.0 * (1.0 - intensity * 0.5)) as u8,
-                            (80.0 + 100.0 * intensity) as u8,
-                        );
-
-                        let mid_y =
-                            p1.y.max(p2.y) + 30.0 + (p1.x - p2.x).abs() * 0.15;
+                        let mid_y = p1.y.max(p2.y) + 30.0 + (p1.x - p2.x).abs() * 0.15;
                         let c1 = egui::pos2(p1.x, mid_y);
                         let c2 = egui::pos2(p2.x, mid_y);
                         let pts: Vec<egui::Pos2> = (0..=20)
@@ -576,12 +605,15 @@ impl eframe::App for App {
                                 )
                             })
                             .collect();
-                        painter.add(egui::Shape::line(pts, egui::Stroke::new(3.0, color)));
+                        painter.add(egui::Shape::line(
+                            pts,
+                            egui::Stroke::new(3.0, egui::Color32::from_rgb(180, 200, 120)),
+                        ));
                     }
                 }
             }
 
-            // Draw drag cable
+            // Drag cable preview
             if let Some(DragState::Cable {
                 from_module,
                 from_port,
@@ -590,11 +622,7 @@ impl eframe::App for App {
             }) = &self.drag
             {
                 if let Some(m) = self.modules.iter().find(|m| m.id == *from_module) {
-                    let ports = if *is_output {
-                        &m.outputs
-                    } else {
-                        &m.inputs
-                    };
+                    let ports = if *is_output { &m.outputs } else { &m.inputs };
                     if let Some(p) = ports.iter().find(|p| p.id == *from_port) {
                         let start = Self::port_world_pos(m, p);
                         painter.line_segment(
@@ -605,10 +633,9 @@ impl eframe::App for App {
                 }
             }
 
-            // Draw modules — use Cardinal's rendered widget texture
+            // Modules
             for m in &self.modules {
                 let mr = egui::Rect::from_min_size(m.pos, m.size);
-
                 if let Some(tex) = &m.texture {
                     painter.image(
                         tex.id(),
@@ -617,7 +644,6 @@ impl eframe::App for App {
                         egui::Color32::WHITE,
                     );
                 } else {
-                    // Fallback until first render completes
                     painter.rect_filled(mr, 0.0, egui::Color32::from_rgb(40, 42, 48));
                     painter.text(
                         m.pos + egui::vec2(m.size.x / 2.0, m.size.y / 2.0),
@@ -632,4 +658,34 @@ impl eframe::App for App {
 
         ctx.request_repaint();
     }
+}
+
+// ── Main ─────────────────────────────────────────────────────────────
+
+fn main() -> eframe::Result {
+    let sample_rate = cpal_sample_rate().unwrap_or(48000.0);
+    eprintln!("Audio sample rate: {sample_rate} Hz");
+
+    // Spawn the Cardinal thread — all engine/plugin/GL state lives there
+    let (cmd_tx, render_rx) = spawn_cardinal_thread(sample_rate);
+
+    // Create audio I/O module on the Cardinal thread
+    cmd_tx.send(Command::CreateAudio).unwrap();
+
+    // Start cpal audio stream (calls audio_process on its own thread;
+    // engine->stepBlock has internal locking)
+    let _audio_stream = start_audio_stream();
+
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([1400.0, 800.0])
+            .with_title("Cardinal"),
+        ..Default::default()
+    };
+
+    eframe::run_native(
+        "cardinal-egui",
+        options,
+        Box::new(move |_cc| Ok(Box::new(App::new(cmd_tx, render_rx)))),
+    )
 }
