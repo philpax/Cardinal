@@ -29,24 +29,8 @@
 #include <cstring>
 #include <unordered_map>
 
-// OSMesa header — declare the symbols we need directly in case the
-// system header isn't available during compilation (it will be at link time
-// on NixOS via mesa.osmesa). The real GL/osmesa.h is preferred if found.
-#if __has_include(<GL/osmesa.h>)
-#include <GL/osmesa.h>
-#else
+#include <EGL/egl.h>
 #include <GL/gl.h>
-// Minimal OSMesa declarations
-typedef struct osmesa_context *OSMesaContext;
-#define OSMESA_RGBA GL_RGBA
-extern "C" {
-    OSMesaContext OSMesaCreateContextExt(GLenum format, GLint depthBits,
-        GLint stencilBits, GLint accumBits, OSMesaContext sharelist);
-    void OSMesaDestroyContext(OSMesaContext ctx);
-    GLboolean OSMesaMakeCurrent(OSMesaContext ctx, void *buffer,
-        GLenum type, GLsizei width, GLsizei height);
-}
-#endif
 
 // We need glewInit() to populate GL extension function pointers for NanoVG.
 // Cardinal provides a stub GL/glew.h that shadows the real one, so we
@@ -127,12 +111,10 @@ static AudioIOModule* g_audioIO = nullptr;
 static rack::Context* g_context = nullptr;
 static rack::engine::Engine* g_engine = nullptr;
 
-// OSMesa state — offscreen GL rendering without EGL/GPU driver dependencies
-static OSMesaContext g_osmesa = nullptr;
-// Persistent pixel buffer for the OSMesa context (resized as needed)
-static std::vector<unsigned char> g_osmesaBuffer;
-static int g_osmesaWidth = 0;
-static int g_osmesaHeight = 0;
+// EGL state
+static EGLDisplay g_eglDisplay = EGL_NO_DISPLAY;
+static EGLContext g_eglContext = EGL_NO_CONTEXT;
+static EGLSurface g_eglSurface = EGL_NO_SURFACE;
 
 // NanoVG context
 static NVGcontext* g_vg = nullptr;
@@ -147,27 +129,89 @@ struct ModuleEntry {
 static std::unordered_map<int64_t, ModuleEntry> g_modules;
 static std::unordered_map<int64_t, rack::engine::Cable*> g_cables;
 
-// ── OSMesa offscreen context ─────────────────────────────────────────
-// Uses Mesa's off-screen rendering — no EGL, no GPU driver dependencies.
-// Works on any platform including NixOS with NVIDIA.
+// ── EGL offscreen context ────────────────────────────────────────────
+// Tries EGL_PLATFORM_DEVICE_EXT first (NVIDIA headless, no X11 needed),
+// then falls back to EGL_DEFAULT_DISPLAY (Mesa swrast).
 
-static bool initOSMesa() {
-    // Create an OSMesa context with RGBA + depth + stencil
-    g_osmesa = OSMesaCreateContextExt(OSMESA_RGBA, 24, 8, 0, nullptr);
-    if (!g_osmesa) {
-        fprintf(stderr, "cardinal: OSMesaCreateContextExt failed\n");
+// EGL extension function types (loaded dynamically)
+typedef EGLBoolean (*PFNEGLQUERYDEVICESEXTPROC)(EGLint, void*, EGLint*);
+typedef EGLDisplay (*PFNEGLGETPLATFORMDISPLAYEXTPROC)(EGLenum, void*, const EGLint*);
+#define EGL_PLATFORM_DEVICE_EXT 0x313F
+
+static bool initEGL() {
+    // Strategy 1: Try EGL_PLATFORM_DEVICE_EXT for headless GPU rendering
+    // This works with NVIDIA's EGL driver without X11/Wayland
+    auto eglQueryDevicesEXT = (PFNEGLQUERYDEVICESEXTPROC)
+        eglGetProcAddress("eglQueryDevicesEXT");
+    auto eglGetPlatformDisplayEXT = (PFNEGLGETPLATFORMDISPLAYEXTPROC)
+        eglGetProcAddress("eglGetPlatformDisplayEXT");
+
+    if (eglQueryDevicesEXT && eglGetPlatformDisplayEXT) {
+        void* devices[8];
+        EGLint numDevices = 0;
+        if (eglQueryDevicesEXT(8, devices, &numDevices) && numDevices > 0) {
+            fprintf(stderr, "cardinal: found %d EGL device(s), trying platform device...\n", numDevices);
+            g_eglDisplay = eglGetPlatformDisplayEXT(EGL_PLATFORM_DEVICE_EXT, devices[0], nullptr);
+        }
+    }
+
+    // Strategy 2: Fall back to default display (Mesa swrast)
+    if (g_eglDisplay == EGL_NO_DISPLAY) {
+        fprintf(stderr, "cardinal: trying EGL_DEFAULT_DISPLAY...\n");
+        g_eglDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    }
+
+    if (g_eglDisplay == EGL_NO_DISPLAY) {
+        fprintf(stderr, "cardinal: no EGL display available\n");
         return false;
     }
 
-    // Make current with an initial small buffer
-    g_osmesaWidth = 512;
-    g_osmesaHeight = 512;
-    g_osmesaBuffer.resize(g_osmesaWidth * g_osmesaHeight * 4);
-    if (!OSMesaMakeCurrent(g_osmesa, g_osmesaBuffer.data(), GL_UNSIGNED_BYTE,
-                            g_osmesaWidth, g_osmesaHeight)) {
-        fprintf(stderr, "cardinal: OSMesaMakeCurrent failed\n");
-        OSMesaDestroyContext(g_osmesa);
-        g_osmesa = nullptr;
+    EGLint major, minor;
+    if (!eglInitialize(g_eglDisplay, &major, &minor)) {
+        fprintf(stderr, "cardinal: eglInitialize failed\n");
+        return false;
+    }
+
+    eglBindAPI(EGL_OPENGL_API);
+
+    EGLint configAttribs[] = {
+        EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, 8,
+        EGL_STENCIL_SIZE, 8,
+        EGL_NONE
+    };
+
+    EGLConfig config;
+    EGLint numConfigs;
+    if (!eglChooseConfig(g_eglDisplay, configAttribs, &config, 1, &numConfigs) || numConfigs == 0) {
+        fprintf(stderr, "cardinal: eglChooseConfig failed\n");
+        return false;
+    }
+
+    EGLint pbufferAttribs[] = {
+        EGL_WIDTH, 2048,
+        EGL_HEIGHT, 2048,
+        EGL_NONE
+    };
+    g_eglSurface = eglCreatePbufferSurface(g_eglDisplay, config, pbufferAttribs);
+
+    EGLint contextAttribs[] = {
+        EGL_CONTEXT_MAJOR_VERSION, 2,
+        EGL_CONTEXT_MINOR_VERSION, 0,
+        EGL_NONE
+    };
+    g_eglContext = eglCreateContext(g_eglDisplay, config, EGL_NO_CONTEXT, contextAttribs);
+    if (g_eglContext == EGL_NO_CONTEXT) {
+        fprintf(stderr, "cardinal: eglCreateContext failed\n");
+        return false;
+    }
+
+    if (!eglMakeCurrent(g_eglDisplay, g_eglSurface, g_eglSurface, g_eglContext)) {
+        fprintf(stderr, "cardinal: eglMakeCurrent failed\n");
         return false;
     }
 
@@ -176,15 +220,17 @@ static bool initOSMesa() {
     GLenum glewErr = glewInit();
     if (glewErr != GLEW_OK) {
         fprintf(stderr, "cardinal: glewInit failed: %s\n", glewGetErrorString(glewErr));
-        OSMesaDestroyContext(g_osmesa);
-        g_osmesa = nullptr;
         return false;
     }
 
     const char* glVersion = (const char*)glGetString(GL_VERSION);
+    if (!glVersion) {
+        fprintf(stderr, "cardinal: GL context broken\n");
+        return false;
+    }
     const char* glVendor = (const char*)glGetString(GL_VENDOR);
     const char* glRenderer = (const char*)glGetString(GL_RENDERER);
-    fprintf(stderr, "cardinal: OSMesa GL=%s (%s, %s)\n",
+    fprintf(stderr, "cardinal: EGL GL=%s (%s, %s)\n",
             glVersion ? glVersion : "?",
             glVendor ? glVendor : "?",
             glRenderer ? glRenderer : "?");
@@ -192,12 +238,18 @@ static bool initOSMesa() {
     return true;
 }
 
-static void shutdownOSMesa() {
-    if (g_osmesa) {
-        OSMesaDestroyContext(g_osmesa);
-        g_osmesa = nullptr;
+static void shutdownEGL() {
+    if (g_eglDisplay != EGL_NO_DISPLAY) {
+        eglMakeCurrent(g_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        if (g_eglContext != EGL_NO_CONTEXT)
+            eglDestroyContext(g_eglDisplay, g_eglContext);
+        if (g_eglSurface != EGL_NO_SURFACE)
+            eglDestroySurface(g_eglDisplay, g_eglSurface);
+        eglTerminate(g_eglDisplay);
     }
-    g_osmesaBuffer.clear();
+    g_eglDisplay = EGL_NO_DISPLAY;
+    g_eglContext = EGL_NO_CONTEXT;
+    g_eglSurface = EGL_NO_SURFACE;
 }
 
 // ── NanoVG init ──────────────────────────────────────────────────────
@@ -243,9 +295,9 @@ int cardinal_init(float sample_rate, const char* resource_dir) {
     rack::settings::devMode = true;
 
     // Init OSMesa + NanoVG on this thread (the Cardinal thread owns GL for its lifetime)
-    fprintf(stderr, "cardinal: [init] OSMesa...\n");
-    if (!initOSMesa()) {
-        fprintf(stderr, "cardinal: OSMesa init failed, falling back to headless\n");
+    fprintf(stderr, "cardinal: [init] EGL...\n");
+    if (!initEGL()) {
+        fprintf(stderr, "cardinal: EGL init failed, falling back to headless\n");
         rack::settings::headless = true;
     }
     if (!rack::settings::headless) {
@@ -320,7 +372,7 @@ void cardinal_shutdown(void) {
     delete g_context;
     g_context = nullptr;
 
-    shutdownOSMesa();
+    shutdownEGL();
     rack::logger::destroy();
 }
 
@@ -568,13 +620,14 @@ int cardinal_module_render(ModuleHandle h,
     *out_width = w;
     *out_height = h2;
 
-    // Resize OSMesa buffer if needed
-    if (w > g_osmesaWidth || h2 > g_osmesaHeight) {
-        g_osmesaWidth = std::max(w, g_osmesaWidth);
-        g_osmesaHeight = std::max(h2, g_osmesaHeight);
-        g_osmesaBuffer.resize(g_osmesaWidth * g_osmesaHeight * 4);
-        OSMesaMakeCurrent(g_osmesa, g_osmesaBuffer.data(), GL_UNSIGNED_BYTE,
-                          g_osmesaWidth, g_osmesaHeight);
+    // Try FBO first (works with real GPU drivers)
+    NVGLUframebuffer* fbo = nvgluCreateFramebuffer(g_vg, w, h2, 0);
+    if (fbo) {
+        nvgluBindFramebuffer(fbo);
+    } else {
+        // Fallback: render to pbuffer directly (Mesa swrast)
+        static bool warned = false;
+        if (!warned) { fprintf(stderr, "cardinal: render: FBO unavailable, using pbuffer\n"); warned = true; }
     }
 
     glViewport(0, 0, w, h2);
@@ -595,8 +648,12 @@ int cardinal_module_render(ModuleHandle h,
     nvgEndFrame(g_vg);
     glFinish();
 
-    // OSMesa renders to its own buffer; read back via glReadPixels
     glReadPixels(0, 0, w, h2, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+    if (fbo) {
+        nvgluBindFramebuffer(nullptr);
+        nvgluDeleteFramebuffer(fbo);
+    }
 
     // Flip vertically (OpenGL is bottom-up)
     int stride = w * 4;
@@ -623,7 +680,9 @@ int cardinal_render_claim_context(void) {
 }
 
 void cardinal_render_release_context(void) {
-    // Nothing to do — OSMesa context stays active on its thread
+    if (g_eglDisplay != EGL_NO_DISPLAY) {
+        eglMakeCurrent(g_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    }
 }
 
 // ── Cable management ─────────────────────────────────────────────────

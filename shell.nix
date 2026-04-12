@@ -21,12 +21,11 @@ pkgs.mkShell {
     libsamplerate
     speexdsp
 
-    # OpenGL + GLEW (for NanoVG rendering)
+    # OpenGL + EGL + GLEW (for NanoVG rendering)
     libGL
     libGLU
     glew
     libglvnd.dev  # provides EGL headers
-    mesa          # provides OSMesa (libOSMesa.so) for offscreen rendering
 
     # X11 (for egui/winit x11 backend)
     xorg.libX11
@@ -49,7 +48,7 @@ pkgs.mkShell {
   LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
     pkgs.libGL
     pkgs.glew
-    pkgs.mesa
+    pkgs.libGL
     pkgs.wayland
     pkgs.libxkbcommon
     pkgs.xorg.libX11
