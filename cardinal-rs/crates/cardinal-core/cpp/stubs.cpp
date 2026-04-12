@@ -297,10 +297,11 @@ std::vector<rack::plugin::Model*> hostTerminalModels;
 // ── Asset path helpers for plugin registration ──────────────────────
 namespace rack { namespace asset {
     std::string pluginManifest(const std::string& dirname) {
-        return rack::system::join(systemDir, "..", "..", "plugins", dirname, "plugin.json");
+        // systemDir = <root>/src/Rack/res → need ../../../plugins/<dirname>
+        return rack::system::join(systemDir, "..", "..", "..", "plugins", dirname, "plugin.json");
     }
     std::string pluginPath(const std::string& dirname) {
-        return rack::system::join(systemDir, "..", "..", "plugins", dirname);
+        return rack::system::join(systemDir, "..", "..", "..", "plugins", dirname);
     }
 }}
 
