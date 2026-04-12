@@ -6,7 +6,7 @@
 // Ensure plugin crates are linked (they provide the compiled plugin objects)
 extern crate cardinal_plugins_registry;
 
-mod ffi;
+pub mod ffi;
 pub mod nanovg_wgpu;
 
 use std::ffi::CString;

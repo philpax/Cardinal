@@ -6,6 +6,8 @@ build = "build.rs"
 
 [dependencies]
 cardinal-core = { path = "../cardinal-core" }
-eframe = { version = "0.31", default-features = false, features = ["glow", "default_fonts", "x11"] }
+eframe = { version = "0.31", default-features = false, features = ["wgpu", "default_fonts", "x11"] }
 egui = "0.31"
+egui-wgpu = "0.31"
+wgpu = "24"
 cpal = "0.15"

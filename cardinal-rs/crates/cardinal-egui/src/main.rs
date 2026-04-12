@@ -1,6 +1,7 @@
 use cardinal_core::{self as cc, CableId, ModuleId};
 use eframe::egui;
 use std::sync::mpsc;
+use std::sync::Arc;
 
 // ── Messages between UI and Cardinal thread ─────────────────────────
 
@@ -30,6 +31,10 @@ enum Command {
     },
     CreateAudio,
     GetCatalog(mpsc::Sender<Vec<cc::CatalogEntry>>),
+    InitGpu {
+        device: Arc<wgpu::Device>,
+        queue: Arc<wgpu::Queue>,
+    },
 }
 
 struct ModuleInfo {
@@ -61,7 +66,9 @@ fn spawn_cardinal_thread(
             // All Cardinal state lives on this thread
             let resource_dir = cc::default_resource_dir();
             cc::init(sample_rate, &resource_dir);
-            cc::render_claim_context();
+
+            #[allow(unused_assignments)]
+            let mut nanovg_ctx: *mut cardinal_core::ffi::NVGcontext = std::ptr::null_mut();
 
             eprintln!("cardinal thread: ready");
 
@@ -123,6 +130,13 @@ fn spawn_cardinal_thread(
                     }
                     Command::GetCatalog(reply) => {
                         let _ = reply.send(cc::catalog());
+                    }
+                    Command::InitGpu { device, queue } => {
+                        nanovg_ctx = cardinal_core::nanovg_wgpu::create_context(
+                            device, queue,
+                            cardinal_core::ffi::NVG_ANTIALIAS | cardinal_core::ffi::NVG_STENCIL_STROKES,
+                        );
+                        eprintln!("cardinal thread: wgpu NanoVG context created: {:?}", !nanovg_ctx.is_null());
                     }
                 }
             }
@@ -261,6 +275,7 @@ struct App {
     browser_filter: String,
     cmd_tx: mpsc::Sender<Command>,
     render_rx: mpsc::Receiver<RenderResult>,
+    gpu_initialized: bool,
 }
 
 impl App {
@@ -278,6 +293,7 @@ impl App {
             browser_filter: String::new(),
             cmd_tx,
             render_rx,
+            gpu_initialized: false,
         }
     }
 
@@ -368,7 +384,16 @@ impl App {
 }
 
 impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        if !self.gpu_initialized {
+            if let Some(render_state) = frame.wgpu_render_state() {
+                let device = Arc::new(render_state.device.clone());
+                let queue = Arc::new(render_state.queue.clone());
+                let _ = self.cmd_tx.send(Command::InitGpu { device, queue });
+                self.gpu_initialized = true;
+            }
+        }
+
         self.poll_render_results(ctx);
         self.request_renders();
 
