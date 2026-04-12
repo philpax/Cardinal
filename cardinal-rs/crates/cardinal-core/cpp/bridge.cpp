@@ -167,10 +167,10 @@ static bool initEGL() {
         return false;
     }
 
-    // Small pbuffer — actual rendering uses FBOs
+    // Large pbuffer — used as fallback render target when FBOs aren't available
     EGLint pbufferAttribs[] = {
-        EGL_WIDTH, 16,
-        EGL_HEIGHT, 16,
+        EGL_WIDTH, 2048,
+        EGL_HEIGHT, 2048,
         EGL_NONE
     };
     g_eglSurface = eglCreatePbufferSurface(g_eglDisplay, config, pbufferAttribs);
@@ -208,7 +208,12 @@ static bool initEGL() {
         shutdownEGL();
         return false;
     }
-    fprintf(stderr, "cardinal: EGL/GL initialized — %s\n", glVersion);
+    const char* glVendor = (const char*)glGetString(GL_VENDOR);
+    const char* glRenderer = (const char*)glGetString(GL_RENDERER);
+    const char* eglVendor = eglQueryString(g_eglDisplay, EGL_VENDOR);
+    fprintf(stderr, "cardinal: EGL vendor=%s GL=%s (%s, %s)\n",
+            eglVendor ? eglVendor : "?",
+            glVersion, glVendor ? glVendor : "?", glRenderer ? glRenderer : "?");
 
     return true;
 }
@@ -595,15 +600,21 @@ int cardinal_module_render(ModuleHandle h,
     *out_width = w;
     *out_height = h2;
 
-    // Create FBO for this render
+    // Try FBO rendering first (hardware-accelerated drivers)
     NVGLUframebuffer* fbo = nvgluCreateFramebuffer(g_vg, w, h2, 0);
-    if (!fbo) {
-        static bool warned = false;
-        if (!warned) { fprintf(stderr, "cardinal: render: FBO creation failed (%dx%d)\n", w, h2); warned = true; }
-        return 0;
+    bool useFbo = (fbo != nullptr);
+    static bool fboWarned = false;
+
+    if (useFbo) {
+        nvgluBindFramebuffer(fbo);
+    } else {
+        // Fallback: render directly to the pbuffer (Mesa swrast)
+        if (!fboWarned) {
+            fprintf(stderr, "cardinal: render: FBO unavailable, using pbuffer fallback\n");
+            fboWarned = true;
+        }
     }
 
-    nvgluBindFramebuffer(fbo);
     glViewport(0, 0, w, h2);
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
@@ -620,11 +631,14 @@ int cardinal_module_render(ModuleHandle h,
     widget->drawLayer(args, 1);
 
     nvgEndFrame(g_vg);
+    glFinish();
 
     glReadPixels(0, 0, w, h2, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
-    nvgluBindFramebuffer(nullptr);
-    nvgluDeleteFramebuffer(fbo);
+    if (useFbo) {
+        nvgluBindFramebuffer(nullptr);
+        nvgluDeleteFramebuffer(fbo);
+    }
 
     // Flip vertically (OpenGL is bottom-up)
     int stride = w * 4;

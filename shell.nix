@@ -58,11 +58,18 @@ pkgs.mkShell {
   ] + ":/run/opengl-driver/lib";
 
   # Tell libglvnd to use the system GPU driver for EGL.
-  # On NixOS, libglvnd needs explicit direction to find NVIDIA's EGL ICD
-  # (otherwise it discovers Mesa's ICD first and uses software rendering).
+  # On NixOS, libglvnd needs explicit direction to find NVIDIA's EGL ICD.
+  # We use __EGL_VENDOR_LIBRARY_FILENAMES to bypass directory scanning
+  # and directly specify the NVIDIA ICD JSON file.
   shellHook = ''
-    if [ -d /run/opengl-driver/share/glvnd/egl_vendor.d ]; then
+    if [ -f /run/opengl-driver/share/glvnd/egl_vendor.d/10_nvidia.json ]; then
+      export __EGL_VENDOR_LIBRARY_FILENAMES=/run/opengl-driver/share/glvnd/egl_vendor.d/10_nvidia.json
+      export LD_LIBRARY_PATH="/run/opengl-driver/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+      echo "NixOS: NVIDIA EGL ICD configured"
+    elif [ -d /run/opengl-driver/share/glvnd/egl_vendor.d ]; then
       export __EGL_VENDOR_LIBRARY_DIRS=/run/opengl-driver/share/glvnd/egl_vendor.d
+      export LD_LIBRARY_PATH="/run/opengl-driver/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+      echo "NixOS: System GL driver configured"
     fi
   '';
 }
