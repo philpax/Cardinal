@@ -12,13 +12,14 @@ use crate::ffi;
 
 // ── Supporting types ─────────────────────────────────────────────────
 
-/// Metadata for a texture stored in the registry.
+/// Metadata and GPU resources for a texture stored in the registry.
 pub struct TextureEntry {
+    pub texture: wgpu::Texture,
+    pub view: wgpu::TextureView,
     pub width: i32,
     pub height: i32,
     pub tex_type: i32,
     pub flags: i32,
-    // Will hold a wgpu::Texture + view in later tasks.
 }
 
 /// The kind of draw call batched for flush.
@@ -121,6 +122,9 @@ pub struct WgpuNvgContext {
     pub dummy_texture_bind_group: Option<wgpu::BindGroup>,
     pub default_sampler: Option<wgpu::Sampler>,
     pub nearest_sampler: Option<wgpu::Sampler>,
+
+    // Texture bind group cache (keyed by texture id)
+    pub texture_bind_groups: HashMap<i32, wgpu::BindGroup>,
 }
 
 impl WgpuNvgContext {
@@ -157,7 +161,53 @@ impl WgpuNvgContext {
             dummy_texture_bind_group: None,
             default_sampler: None,
             nearest_sampler: None,
+            texture_bind_groups: HashMap::new(),
         }
+    }
+}
+
+impl WgpuNvgContext {
+    /// Get or create a bind group for the given texture id.
+    /// Returns the dummy bind group for id 0 or missing textures.
+    fn ensure_texture_bind_group(&mut self, image: i32) -> &wgpu::BindGroup {
+        if image == 0 {
+            return self.dummy_texture_bind_group.as_ref().unwrap();
+        }
+
+        if !self.texture_bind_groups.contains_key(&image) {
+            let (view, flags) = if let Some(tex) = self.textures.get(&image) {
+                (&tex.view as *const wgpu::TextureView, tex.flags)
+            } else {
+                return self.dummy_texture_bind_group.as_ref().unwrap();
+            };
+
+            let sampler = if (flags & ffi::NVG_IMAGE_NEAREST) != 0 {
+                self.nearest_sampler.as_ref().unwrap()
+            } else {
+                self.default_sampler.as_ref().unwrap()
+            };
+
+            // SAFETY: view pointer is valid because we checked textures.get above
+            // and we don't modify textures between the get and this usage.
+            let view_ref = unsafe { &*view };
+
+            let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some(&format!("nvg_tex_bg_{image}")),
+                layout: self.texture_bind_group_layout.as_ref().unwrap(),
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(view_ref),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(sampler),
+                    },
+                ],
+            });
+            self.texture_bind_groups.insert(image, bg);
+        }
+        self.texture_bind_groups.get(&image).unwrap()
     }
 }
 
@@ -656,28 +706,94 @@ unsafe extern "C" fn render_create_texture(
     w: c_int,
     h: c_int,
     image_flags: c_int,
-    _data: *const u8,
+    data: *const u8,
 ) -> c_int {
     let ctx = unsafe { ctx_from_uptr(uptr) };
     let id = ctx.next_texture_id;
     ctx.next_texture_id += 1;
+
+    let (format, bpp): (wgpu::TextureFormat, u32) = if tex_type == ffi::NVG_TEXTURE_RGBA {
+        (wgpu::TextureFormat::Rgba8Unorm, 4)
+    } else {
+        (wgpu::TextureFormat::R8Unorm, 1)
+    };
+
+    let generate_mipmaps = (image_flags & ffi::NVG_IMAGE_GENERATE_MIPMAPS) != 0;
+    let mip_level_count = if generate_mipmaps {
+        ((w.max(h) as f32).log2().floor() as u32) + 1
+    } else {
+        1
+    };
+
+    let mut usage = wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST;
+    if generate_mipmaps {
+        usage |= wgpu::TextureUsages::RENDER_ATTACHMENT;
+    }
+
+    let texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(&format!("nvg_texture_{id}")),
+        size: wgpu::Extent3d {
+            width: w as u32,
+            height: h as u32,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage,
+        view_formats: &[],
+    });
+
+    if !data.is_null() {
+        let data_size = (w as usize) * (h as usize) * (bpp as usize);
+        let data_slice = unsafe { std::slice::from_raw_parts(data, data_size) };
+        ctx.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            data_slice,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(w as u32 * bpp),
+                rows_per_image: None,
+            },
+            wgpu::Extent3d {
+                width: w as u32,
+                height: h as u32,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+    // Invalidate any stale bind group cache entry
+    ctx.texture_bind_groups.remove(&id);
+
     ctx.textures.insert(
         id,
         TextureEntry {
+            texture,
+            view,
             width: w,
             height: h,
             tex_type,
             flags: image_flags,
         },
     );
-    eprintln!("nanovg-wgpu: renderCreateTexture (stub) id={id} {w}x{h}");
+    eprintln!("nanovg-wgpu: renderCreateTexture id={id} {w}x{h} type={tex_type} mips={mip_level_count}");
     id
 }
 
 unsafe extern "C" fn render_delete_texture(uptr: *mut c_void, image: c_int) -> c_int {
     let ctx = unsafe { ctx_from_uptr(uptr) };
+    ctx.texture_bind_groups.remove(&image);
     if ctx.textures.remove(&image).is_some() {
-        eprintln!("nanovg-wgpu: renderDeleteTexture (stub) id={image}");
+        eprintln!("nanovg-wgpu: renderDeleteTexture id={image}");
         1
     } else {
         0
@@ -685,15 +801,62 @@ unsafe extern "C" fn render_delete_texture(uptr: *mut c_void, image: c_int) -> c
 }
 
 unsafe extern "C" fn render_update_texture(
-    _uptr: *mut c_void,
+    uptr: *mut c_void,
     image: c_int,
-    _x: c_int,
-    _y: c_int,
-    _w: c_int,
-    _h: c_int,
-    _data: *const u8,
+    x: c_int,
+    y: c_int,
+    w: c_int,
+    h: c_int,
+    data: *const u8,
 ) -> c_int {
-    eprintln!("nanovg-wgpu: renderUpdateTexture (stub) id={image}");
+    let ctx = unsafe { ctx_from_uptr(uptr) };
+
+    let (tex_width, tex_type) = if let Some(tex) = ctx.textures.get(&image) {
+        (tex.width, tex.tex_type)
+    } else {
+        return 0;
+    };
+
+    let bpp: usize = if tex_type == ffi::NVG_TEXTURE_RGBA { 4 } else { 1 };
+
+    // Extract the sub-region into a tightly packed buffer
+    let row_bytes = w as usize * bpp;
+    let mut packed = Vec::with_capacity(h as usize * row_bytes);
+    for r in 0..h as usize {
+        let src_offset = (y as usize + r) * tex_width as usize * bpp + x as usize * bpp;
+        let src = unsafe { std::slice::from_raw_parts(data.add(src_offset), row_bytes) };
+        packed.extend_from_slice(src);
+    }
+
+    let texture = &ctx.textures.get(&image).unwrap().texture;
+    ctx.queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d {
+                x: x as u32,
+                y: y as u32,
+                z: 0,
+            },
+            aspect: wgpu::TextureAspect::All,
+        },
+        &packed,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(row_bytes as u32),
+            rows_per_image: None,
+        },
+        wgpu::Extent3d {
+            width: w as u32,
+            height: h as u32,
+            depth_or_array_layers: 1,
+        },
+    );
+
+    // Invalidate cached bind group since texture content changed
+    ctx.texture_bind_groups.remove(&image);
+
+    eprintln!("nanovg-wgpu: renderUpdateTexture id={image} region=({x},{y},{w},{h})");
     1
 }
 
