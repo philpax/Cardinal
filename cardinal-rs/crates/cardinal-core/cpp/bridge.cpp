@@ -32,6 +32,17 @@
 #include <EGL/egl.h>
 #include <GL/gl.h>
 
+// We need glewInit() to populate GL extension function pointers for NanoVG.
+// Cardinal provides a stub GL/glew.h that shadows the real one, so we
+// declare the handful of GLEW symbols we need directly.
+extern "C" {
+    extern unsigned char glewExperimental;
+    typedef unsigned int GLenum;
+    GLenum glewInit(void);
+    const unsigned char* glewGetErrorString(GLenum error);
+}
+#define GLEW_OK 0
+
 // Forward declarations
 // Plugin registration is handled by Rust (cardinal_plugins_registry::register_all_plugins)
 extern std::vector<rack::plugin::Model*> hostTerminalModels;
@@ -177,6 +188,16 @@ static bool initEGL() {
 
     if (!eglMakeCurrent(g_eglDisplay, g_eglSurface, g_eglSurface, g_eglContext)) {
         fprintf(stderr, "cardinal: eglMakeCurrent failed\n");
+        return false;
+    }
+
+    // Initialize GLEW so GL extension function pointers are loaded
+    // (NanoVG GL2 backend calls GL functions through GLEW)
+    glewExperimental = GL_TRUE;
+    GLenum glewErr = glewInit();
+    if (glewErr != GLEW_OK) {
+        fprintf(stderr, "cardinal: glewInit failed: %s\n", glewGetErrorString(glewErr));
+        shutdownEGL();
         return false;
     }
 
