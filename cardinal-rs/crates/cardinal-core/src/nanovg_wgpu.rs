@@ -174,13 +174,19 @@ pub struct WgpuNvgContext {
     pub render_target_stack: Vec<RenderTargetState>,
 }
 
-/// Saved render target state for FBO push/pop.
+/// Saved render target + draw state for FBO push/pop.
 pub struct RenderTargetState {
     pub view: Option<wgpu::TextureView>,
     pub stencil: Option<wgpu::Texture>,
     pub stencil_view: Option<wgpu::TextureView>,
     pub width: u32,
     pub height: u32,
+    // Saved draw state — the outer frame's batched draws
+    pub draw_calls: Vec<DrawCall>,
+    pub vertices: Vec<ffi::NVGvertex>,
+    pub uniforms: Vec<FragUniforms>,
+    pub view_width: f32,
+    pub view_height: f32,
 }
 
 impl WgpuNvgContext {
@@ -624,13 +630,24 @@ pub extern "C" fn nvg_wgpu_bind_framebuffer(
     let ctx = unsafe { ctx_from_uptr(uptr) };
 
     if image >= 0 {
-        // Push current render target state
+        // Push current render target state AND draw state.
+        // The outer frame's batched draws must be preserved — the inner
+        // frame (FBO rendering) will batch its own draws and flush them
+        // independently via nvgEndFrame(fbVg).
+        let saved_draws = std::mem::take(&mut ctx.draw_calls);
+        let saved_verts = std::mem::take(&mut ctx.vertices);
+        let saved_unis = std::mem::take(&mut ctx.uniforms);
         ctx.render_target_stack.push(RenderTargetState {
             view: ctx.render_target_view.take(),
             stencil: ctx.render_target_stencil.take(),
             stencil_view: ctx.render_target_stencil_view.take(),
             width: ctx.render_target_width,
             height: ctx.render_target_height,
+            draw_calls: saved_draws,
+            vertices: saved_verts,
+            uniforms: saved_unis,
+            view_width: ctx.view_width,
+            view_height: ctx.view_height,
         });
 
         // Look up the texture for this NanoVG image
@@ -662,13 +679,18 @@ pub extern "C" fn nvg_wgpu_bind_framebuffer(
             eprintln!("nvg_wgpu_bind_framebuffer: image {image} not found in texture registry");
         }
     } else {
-        // Pop: restore previous render target
+        // Pop: restore previous render target AND draw state
         if let Some(state) = ctx.render_target_stack.pop() {
             ctx.render_target_view = state.view;
             ctx.render_target_stencil = state.stencil;
             ctx.render_target_stencil_view = state.stencil_view;
             ctx.render_target_width = state.width;
             ctx.render_target_height = state.height;
+            ctx.draw_calls = state.draw_calls;
+            ctx.vertices = state.vertices;
+            ctx.uniforms = state.uniforms;
+            ctx.view_width = state.view_width;
+            ctx.view_height = state.view_height;
         }
     }
 }
