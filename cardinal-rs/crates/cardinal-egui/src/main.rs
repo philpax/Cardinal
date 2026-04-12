@@ -325,12 +325,9 @@ impl eframe::App for App {
         // Poll for completed renders from the render thread
         self.poll_render_results(ctx);
 
-        // Request re-renders periodically (every 30 frames for lights/displays)
-        let fc = self.frame_count;
+        // Request re-renders every frame (async — doesn't block the UI)
         for i in 0..self.modules.len() {
-            if self.modules[i].texture.is_none() || fc - self.modules[i].render_frame > 30 {
-                self.request_render(i);
-            }
+            self.request_render(i);
         }
 
         // ── Side panel: Module Browser ───────────────────────────────
