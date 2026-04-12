@@ -25,6 +25,7 @@
 #include <asset.hpp>
 #include <system.hpp>
 #include <window/Window.hpp>
+#include <app/Scene.hpp>
 
 #include <cstring>
 #include <unordered_map>
@@ -160,6 +161,11 @@ int cardinal_init(float sample_rate, const char* resource_dir) {
     fprintf(stderr, "cardinal: [init] creating Window...\n");
     auto* window = new rack::window::Window();
     g_context->window = window;
+
+    // Create Scene — PortWidget::draw accesses APP->scene->rack.
+    // Our stub Scene just creates a RackWidget so the access path is valid.
+    fprintf(stderr, "cardinal: [init] creating Scene...\n");
+    g_context->scene = new rack::app::Scene();
 
     // Plugin registration is deferred to Rust side
 

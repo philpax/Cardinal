@@ -133,8 +133,38 @@ std::shared_ptr<Image> Image::load(const std::string& filename) {
 
 // ── GLFW stubs ──────────────────────────────────────────────────────
 // ── Scene stubs ─────────────────────────────────────────────────────
+// Scene is excluded from the build (too many UI deps).  We provide a
+// minimal implementation so that APP->scene->rack->getIncompleteCable()
+// (called by PortWidget::draw) doesn't crash.
+
+#include <app/RackWidget.hpp>
+
 namespace rack { namespace app {
-    math::Vec Scene::getMousePos() { return mousePos; }
+
+// Minimal Scene — just sets up a RackWidget so widget code can access it.
+struct Scene::Internal {};
+
+Scene::Scene() {
+    internal = new Internal;
+    rack = new RackWidget;
+    rackScroll = nullptr;
+    menuBar = nullptr;
+    browser = nullptr;
+}
+
+Scene::~Scene() {
+    delete rack;
+    delete internal;
+}
+
+math::Vec Scene::getMousePos() { return mousePos; }
+void Scene::step() {}
+void Scene::draw(const DrawArgs&) {}
+void Scene::onHover(const HoverEvent&) {}
+void Scene::onDragHover(const DragHoverEvent&) {}
+void Scene::onHoverKey(const HoverKeyEvent&) {}
+void Scene::onPathDrop(const PathDropEvent&) {}
+
 }}
 
 // ── Audio port stubs (we use our own AudioIO terminal module) ───────
