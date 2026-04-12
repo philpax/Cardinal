@@ -42,7 +42,10 @@ pkgs.mkShell {
     libxkbcommon
   ];
 
-  # Ensure the linker and runtime can find libraries
+  # Ensure the linker and runtime can find libraries.
+  # /run/opengl-driver/lib contains the system GPU driver (e.g. NVIDIA's
+  # libEGL_nvidia.so). Without it, EGL falls back to Mesa's software
+  # renderer (swrast) which is slow and doesn't support FBOs properly.
   LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
     pkgs.libGL
     pkgs.glew
@@ -53,5 +56,5 @@ pkgs.mkShell {
     pkgs.xorg.libXrandr
     pkgs.xorg.libXi
     pkgs.alsa-lib
-  ];
+  ] + ":/run/opengl-driver/lib";
 }
