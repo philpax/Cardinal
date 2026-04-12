@@ -1472,6 +1472,7 @@ unsafe extern "C" fn render_flush(uptr: *mut c_void) {
                     rpass.set_pipeline(ctx.pipeline_stencil_fill_draw_stencil.as_ref().unwrap());
                     rpass.set_vertex_buffer(0, vert_buf.slice(..));
                     rpass.set_bind_group(0, Some(&view_bind_group), &[uniform_offset]);
+                    rpass.set_bind_group(1, Some(ctx.dummy_texture_bind_group.as_ref().unwrap()), &[]);
 
                     for path in &call.paths {
                         if path.fill_count > 0 {
@@ -1698,6 +1699,8 @@ unsafe extern "C" fn render_flush(uptr: *mut c_void) {
                         });
                         rpass.set_pipeline(ctx.pipeline_stencil_stroke_clear.as_ref().unwrap());
                         rpass.set_vertex_buffer(0, vert_buf.slice(..));
+                        rpass.set_bind_group(0, Some(&view_bind_group), &[uniform_offset]);
+                        rpass.set_bind_group(1, Some(ctx.dummy_texture_bind_group.as_ref().unwrap()), &[]);
 
                         for path in &call.paths {
                             if path.stroke_count > 0 {
