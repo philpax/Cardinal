@@ -60,7 +60,7 @@ fn main() {
     println!("cargo:rustc-link-arg=-Wl,--allow-multiple-definition");
 
     // ── System libraries ─────────────────────────────────────────────
-    for lib in &["jansson", "archive", "samplerate", "speexdsp", "pthread", "dl", "GL", "GLEW", "EGL"] {
+    for lib in &["jansson", "archive", "samplerate", "speexdsp", "pthread", "dl", "GL", "GLEW", "OSMesa"] {
         println!("cargo:rustc-link-lib={lib}");
     }
 
@@ -155,6 +155,21 @@ fn build_bridge(includes: &[PathBuf]) {
     let mut build = cc::Build::new();
     build.cpp(true).std("c++17").warnings(false)
         .define("PRIVATE", "").define("ARCH_X64", None).define("ARCH_LIN", None);
+
+    // OSMesa headers (offscreen GL rendering)
+    if let Ok(osmesa) = pkg_config::probe_library("osmesa") {
+        for path in &osmesa.include_paths {
+            build.include(path);
+        }
+    }
+
+    // System GLEW headers (for glewInit)
+    if let Ok(glew) = pkg_config::probe_library("glew") {
+        for path in &glew.include_paths {
+            build.include(path);
+        }
+    }
+
     for d in includes { build.include(d); }
     build.file(bridge_dir.join("bridge.cpp"));
     build.file(bridge_dir.join("stubs.cpp"));

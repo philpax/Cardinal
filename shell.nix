@@ -21,11 +21,12 @@ pkgs.mkShell {
     libsamplerate
     speexdsp
 
-    # OpenGL + EGL + GLEW (for NanoVG rendering)
+    # OpenGL + GLEW (for NanoVG rendering)
     libGL
     libGLU
     glew
     libglvnd.dev  # provides EGL headers
+    mesa.osmesa   # offscreen GL rendering (avoids EGL driver issues)
 
     # X11 (for egui/winit x11 backend)
     xorg.libX11
@@ -48,6 +49,7 @@ pkgs.mkShell {
   LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
     pkgs.libGL
     pkgs.glew
+    pkgs.mesa.osmesa
     pkgs.wayland
     pkgs.libxkbcommon
     pkgs.xorg.libX11
@@ -55,21 +57,5 @@ pkgs.mkShell {
     pkgs.xorg.libXrandr
     pkgs.xorg.libXi
     pkgs.alsa-lib
-  ] + ":/run/opengl-driver/lib";
-
-  # Tell libglvnd to use the system GPU driver for EGL.
-  # On NixOS, libglvnd needs explicit direction to find NVIDIA's EGL ICD.
-  # We use __EGL_VENDOR_LIBRARY_FILENAMES to bypass directory scanning
-  # and directly specify the NVIDIA ICD JSON file.
-  shellHook = ''
-    if [ -f /run/opengl-driver/share/glvnd/egl_vendor.d/10_nvidia.json ]; then
-      export __EGL_VENDOR_LIBRARY_FILENAMES=/run/opengl-driver/share/glvnd/egl_vendor.d/10_nvidia.json
-      export LD_LIBRARY_PATH="/run/opengl-driver/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-      echo "NixOS: NVIDIA EGL ICD configured"
-    elif [ -d /run/opengl-driver/share/glvnd/egl_vendor.d ]; then
-      export __EGL_VENDOR_LIBRARY_DIRS=/run/opengl-driver/share/glvnd/egl_vendor.d
-      export LD_LIBRARY_PATH="/run/opengl-driver/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-      echo "NixOS: System GL driver configured"
-    fi
-  '';
+  ];
 }
