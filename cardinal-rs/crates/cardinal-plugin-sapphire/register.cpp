@@ -1,7 +1,7 @@
 // Auto-generated — registration function for Sapphire
 // Renames init() only in the included file, not globally
 #define init init__sapphire
-#include "/home/user/Cardinal/plugins/Sapphire/src/plugin.cpp"
+#include "Sapphire/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

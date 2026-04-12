@@ -1,7 +1,7 @@
 // Auto-generated — registration function for ZZC
 // Renames init() only in the included file, not globally
 #define init init__ZZC
-#include "/home/user/Cardinal/plugins/ZZC/src/ZZC.cpp"
+#include "ZZC/src/ZZC.cpp"
 #undef init
 
 #include <rack.hpp>

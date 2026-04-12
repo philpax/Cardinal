@@ -1,7 +1,7 @@
 // Auto-generated — registration function for AnimatedCircuits
 // Renames init() only in the included file, not globally
 #define init init__AnimatedCircuits
-#include "/home/user/Cardinal/plugins/AnimatedCircuits/src/plugin.cpp"
+#include "AnimatedCircuits/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

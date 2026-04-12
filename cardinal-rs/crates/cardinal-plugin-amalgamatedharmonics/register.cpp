@@ -1,7 +1,7 @@
 // Auto-generated — registration function for AmalgamatedHarmonics
 // Renames init() only in the included file, not globally
 #define init init__AmalgamatedHarmonics
-#include "/home/user/Cardinal/plugins/AmalgamatedHarmonics/src/AH.cpp"
+#include "AmalgamatedHarmonics/src/AH.cpp"
 #undef init
 
 #include <rack.hpp>

@@ -1,7 +1,7 @@
 // Auto-generated — registration function for GrandeModular
 // Renames init() only in the included file, not globally
 #define init init__GrandeModular
-#include "/home/user/Cardinal/plugins/GrandeModular/src/plugin.cpp"
+#include "GrandeModular/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

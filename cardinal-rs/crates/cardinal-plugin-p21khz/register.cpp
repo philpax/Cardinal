@@ -1,7 +1,7 @@
 // Auto-generated — registration function for 21kHz
 // Renames init() only in the included file, not globally
 #define init init__21kHz
-#include "/home/user/Cardinal/plugins/21kHz/src/21kHz.cpp"
+#include "21kHz/src/21kHz.cpp"
 #undef init
 
 #include <rack.hpp>

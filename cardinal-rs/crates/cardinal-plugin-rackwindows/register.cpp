@@ -1,7 +1,7 @@
 // Auto-generated — registration function for rackwindows
 // Renames init() only in the included file, not globally
 #define init init__rackwindows
-#include "/home/user/Cardinal/plugins/rackwindows/src/plugin.cpp"
+#include "rackwindows/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

@@ -1,7 +1,7 @@
 // Auto-generated — registration function for ESeries
 // Renames init() only in the included file, not globally
 #define init init__ESeries
-#include "/home/user/Cardinal/plugins/ESeries/src/plugin.cpp"
+#include "ESeries/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

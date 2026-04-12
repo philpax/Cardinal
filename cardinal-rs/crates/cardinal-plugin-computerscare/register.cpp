@@ -1,7 +1,7 @@
 // Auto-generated — registration function for Computerscare
 // Renames init() only in the included file, not globally
 #define init init__Computerscare
-#include "/home/user/Cardinal/plugins/Computerscare/src/Computerscare.cpp"
+#include "Computerscare/src/Computerscare.cpp"
 #undef init
 
 #include <rack.hpp>

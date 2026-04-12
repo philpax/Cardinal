@@ -1,7 +1,7 @@
 // Auto-generated — registration function for HamptonHarmonics
 // Renames init() only in the included file, not globally
 #define init init__HamptonHarmonics
-#include "/home/user/Cardinal/plugins/HamptonHarmonics/src/plugin.cpp"
+#include "HamptonHarmonics/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

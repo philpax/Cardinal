@@ -1,7 +1,7 @@
 // Auto-generated — registration function for Venom
 // Renames init() only in the included file, not globally
 #define init init__Venom
-#include "/home/user/Cardinal/plugins/Venom/src/plugin.cpp"
+#include "Venom/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

@@ -1,7 +1,7 @@
 // Auto-generated — registration function for 8Mode
 // Renames init() only in the included file, not globally
 #define init init__8Mode
-#include "/home/user/Cardinal/plugins/8Mode/src/8mode.cpp"
+#include "8Mode/src/8mode.cpp"
 #undef init
 
 #include <rack.hpp>

@@ -1,7 +1,7 @@
 // Auto-generated — registration function for Fundamental
 // Renames init() only in the included file, not globally
 #define init init__Fundamental
-#include "/home/user/Cardinal/plugins/Fundamental/src/plugin.cpp"
+#include "Fundamental/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

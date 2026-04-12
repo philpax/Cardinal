@@ -1,7 +1,7 @@
 // Auto-generated — registration function for cf
 // Renames init() only in the included file, not globally
 #define init init__cf
-#include "/home/user/Cardinal/plugins/cf/src/plugin.cpp"
+#include "cf/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

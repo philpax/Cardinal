@@ -1,7 +1,7 @@
 // Auto-generated — registration function for ihtsyn
 // Renames init() only in the included file, not globally
 #define init init__ihtsyn
-#include "/home/user/Cardinal/plugins/ihtsyn/src/plugin.cpp"
+#include "ihtsyn/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

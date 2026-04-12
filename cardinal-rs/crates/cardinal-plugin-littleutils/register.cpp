@@ -1,7 +1,7 @@
 // Auto-generated — registration function for LittleUtils
 // Renames init() only in the included file, not globally
 #define init init__LittleUtils
-#include "/home/user/Cardinal/plugins/LittleUtils/src/plugin.cpp"
+#include "LittleUtils/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

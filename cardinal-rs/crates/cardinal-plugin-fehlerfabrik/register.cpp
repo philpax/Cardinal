@@ -1,7 +1,7 @@
 // Auto-generated — registration function for FehlerFabrik
 // Renames init() only in the included file, not globally
 #define init init__FehlerFabrik
-#include "/home/user/Cardinal/plugins/FehlerFabrik/src/plugin.cpp"
+#include "FehlerFabrik/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

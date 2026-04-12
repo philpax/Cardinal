@@ -1,7 +1,7 @@
 // Auto-generated — registration function for MUS-X
 // Renames init() only in the included file, not globally
 #define init init__MUS_X
-#include "/home/user/Cardinal/plugins/MUS-X/src/plugin.cpp"
+#include "MUS-X/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

@@ -1,7 +1,7 @@
 // Auto-generated — registration function for kocmoc
 // Renames init() only in the included file, not globally
 #define init init__kocmoc
-#include "/home/user/Cardinal/plugins/kocmoc/src/plugin.cpp"
+#include "kocmoc/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

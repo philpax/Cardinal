@@ -1,7 +1,7 @@
 // Auto-generated — registration function for LifeFormModular
 // Renames init() only in the included file, not globally
 #define init init__LifeFormModular
-#include "/home/user/Cardinal/plugins/LifeFormModular/src/plugin.cpp"
+#include "LifeFormModular/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

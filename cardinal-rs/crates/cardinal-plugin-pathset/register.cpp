@@ -1,7 +1,7 @@
 // Auto-generated — registration function for PathSet
 // Renames init() only in the included file, not globally
 #define init init__PathSet
-#include "/home/user/Cardinal/plugins/PathSet/src/plugin.cpp"
+#include "PathSet/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

@@ -1,7 +1,7 @@
 // Auto-generated — registration function for dBiz
 // Renames init() only in the included file, not globally
 #define init init__dBiz
-#include "/home/user/Cardinal/plugins/dBiz/src/plugin.cpp"
+#include "dBiz/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

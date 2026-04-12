@@ -1,7 +1,7 @@
 // Auto-generated — registration function for forsitan-modulare
 // Renames init() only in the included file, not globally
 #define init init__forsitan
-#include "/home/user/Cardinal/plugins/forsitan-modulare/src/forsitan.cpp"
+#include "forsitan-modulare/src/forsitan.cpp"
 #undef init
 
 #include <rack.hpp>

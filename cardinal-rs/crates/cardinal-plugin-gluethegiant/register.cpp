@@ -1,7 +1,7 @@
 // Auto-generated — registration function for GlueTheGiant
 // Renames init() only in the included file, not globally
 #define init init__GlueTheGiant
-#include "/home/user/Cardinal/plugins/GlueTheGiant/src/plugin.cpp"
+#include "GlueTheGiant/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

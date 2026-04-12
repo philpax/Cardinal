@@ -1,7 +1,7 @@
 // Auto-generated — registration function for Mog
 // Renames init() only in the included file, not globally
 #define init init__Mog
-#include "/home/user/Cardinal/plugins/Mog/src/plugin.cpp"
+#include "Mog/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

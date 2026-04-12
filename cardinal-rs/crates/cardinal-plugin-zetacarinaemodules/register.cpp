@@ -1,7 +1,7 @@
 // Auto-generated — registration function for ZetaCarinaeModules
 // Renames init() only in the included file, not globally
 #define init init__ZetaCarinaeModules
-#include "/home/user/Cardinal/plugins/ZetaCarinaeModules/src/plugin.cpp"
+#include "ZetaCarinaeModules/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

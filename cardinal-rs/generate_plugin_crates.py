@@ -372,7 +372,7 @@ cc = "1"
         register_content = f'''// Auto-generated — registration function for {vendor}
 // Renames init() only in the included file, not globally
 #define init init__{safe_name}
-#include "{PLUGINS_DIR / init_file}"
+#include "{init_file}"
 #undef init
 
 #include <rack.hpp>
@@ -423,7 +423,7 @@ extern "C" void cardinal_register_{safe_name}() {{
 }}
 '''
         register_path.write_text(register_content)
-        init_wrapper_code = f'    build.file(std::path::Path::new("{register_path.resolve()}"));\n'
+        init_wrapper_code = f'    build.file(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("register.cpp"));\n'
         kept_filter_out.extend(init_files)
     else:
         # No init file found — vendor has no registration

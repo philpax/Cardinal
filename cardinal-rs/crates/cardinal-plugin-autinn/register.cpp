@@ -1,7 +1,7 @@
 // Auto-generated — registration function for Autinn
 // Renames init() only in the included file, not globally
 #define init init__Autinn
-#include "/home/user/Cardinal/plugins/Autinn/src/Autinn.cpp"
+#include "Autinn/src/Autinn.cpp"
 #undef init
 
 #include <rack.hpp>

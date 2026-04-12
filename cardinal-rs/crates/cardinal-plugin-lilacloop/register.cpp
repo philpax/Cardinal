@@ -1,7 +1,7 @@
 // Auto-generated — registration function for LilacLoop
 // Renames init() only in the included file, not globally
 #define init init__LilacLoop
-#include "/home/user/Cardinal/plugins/LilacLoop/src/plugin.cpp"
+#include "LilacLoop/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

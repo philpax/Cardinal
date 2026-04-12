@@ -1,7 +1,7 @@
 // Auto-generated — registration function for Axioma
 // Renames init() only in the included file, not globally
 #define init init__Axioma
-#include "/home/user/Cardinal/plugins/Axioma/src/plugin.cpp"
+#include "Axioma/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

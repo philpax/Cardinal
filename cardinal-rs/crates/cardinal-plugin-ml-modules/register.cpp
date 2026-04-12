@@ -1,7 +1,7 @@
 // Auto-generated — registration function for ML_modules
 // Renames init() only in the included file, not globally
 #define init init__ML
-#include "/home/user/Cardinal/plugins/ML_modules/src/ML_modules.cpp"
+#include "ML_modules/src/ML_modules.cpp"
 #undef init
 
 #include <rack.hpp>

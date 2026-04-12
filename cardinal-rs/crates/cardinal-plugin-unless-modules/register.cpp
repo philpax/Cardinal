@@ -1,7 +1,7 @@
 // Auto-generated — registration function for unless_modules
 // Renames init() only in the included file, not globally
 #define init init__unless_modules
-#include "/home/user/Cardinal/plugins/unless_modules/src/unless.cpp"
+#include "unless_modules/src/unless.cpp"
 #undef init
 
 #include <rack.hpp>

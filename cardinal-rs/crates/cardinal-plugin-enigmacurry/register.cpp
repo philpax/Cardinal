@@ -1,7 +1,7 @@
 // Auto-generated — registration function for EnigmaCurry
 // Renames init() only in the included file, not globally
 #define init init__EnigmaCurry
-#include "/home/user/Cardinal/plugins/EnigmaCurry/src/plugin.cpp"
+#include "EnigmaCurry/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

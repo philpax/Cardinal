@@ -1,7 +1,7 @@
 // Auto-generated — registration function for ExpertSleepers-Encoders
 // Renames init() only in the included file, not globally
 #define init init__ExpertSleepersEncoders
-#include "/home/user/Cardinal/plugins/ExpertSleepers-Encoders/src/Encoders.cpp"
+#include "ExpertSleepers-Encoders/src/Encoders.cpp"
 #undef init
 
 #include <rack.hpp>

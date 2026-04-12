@@ -1,7 +1,7 @@
 // Auto-generated — registration function for Prism
 // Renames init() only in the included file, not globally
 #define init init__Prism
-#include "/home/user/Cardinal/plugins/Prism/src/plugin.cpp"
+#include "Prism/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

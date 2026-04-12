@@ -1,7 +1,7 @@
 // Auto-generated — registration function for GoodSheperd
 // Renames init() only in the included file, not globally
 #define init init__GoodSheperd
-#include "/home/user/Cardinal/plugins/GoodSheperd/src/plugin.cpp"
+#include "GoodSheperd/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

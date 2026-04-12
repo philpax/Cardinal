@@ -1,7 +1,7 @@
 // Auto-generated — registration function for MSM
 // Renames init() only in the included file, not globally
 #define init init__MSM
-#include "/home/user/Cardinal/plugins/MSM/src/MSM.cpp"
+#include "MSM/src/MSM.cpp"
 #undef init
 
 #include <rack.hpp>

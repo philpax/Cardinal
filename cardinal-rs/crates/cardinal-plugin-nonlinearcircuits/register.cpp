@@ -1,7 +1,7 @@
 // Auto-generated — registration function for nonlinearcircuits
 // Renames init() only in the included file, not globally
 #define init init__nonlinearcircuits
-#include "/home/user/Cardinal/plugins/nonlinearcircuits/src/NLC.cpp"
+#include "nonlinearcircuits/src/NLC.cpp"
 #undef init
 
 #include <rack.hpp>

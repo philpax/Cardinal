@@ -1,7 +1,7 @@
 // Auto-generated — registration function for Extratone
 // Renames init() only in the included file, not globally
 #define init init__Extratone
-#include "/home/user/Cardinal/plugins/Extratone/src/plugin.cpp"
+#include "Extratone/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

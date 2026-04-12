@@ -1,7 +1,7 @@
 // Auto-generated — registration function for PdArray
 // Renames init() only in the included file, not globally
 #define init init__PdArray
-#include "/home/user/Cardinal/plugins/PdArray/src/plugin.cpp"
+#include "PdArray/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

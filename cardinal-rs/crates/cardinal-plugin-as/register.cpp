@@ -1,7 +1,7 @@
 // Auto-generated — registration function for AS
 // Renames init() only in the included file, not globally
 #define init init__AS
-#include "/home/user/Cardinal/plugins/AS/src/AS.cpp"
+#include "AS/src/AS.cpp"
 #undef init
 
 #include <rack.hpp>

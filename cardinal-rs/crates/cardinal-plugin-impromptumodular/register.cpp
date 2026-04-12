@@ -1,7 +1,7 @@
 // Auto-generated — registration function for ImpromptuModular
 // Renames init() only in the included file, not globally
 #define init init__ImpromptuModular
-#include "/home/user/Cardinal/plugins/ImpromptuModular/src/ImpromptuModular.cpp"
+#include "ImpromptuModular/src/ImpromptuModular.cpp"
 #undef init
 
 #include <rack.hpp>

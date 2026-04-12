@@ -1,7 +1,7 @@
 // Auto-generated — registration function for AaronStatic
 // Renames init() only in the included file, not globally
 #define init init__AaronStatic
-#include "/home/user/Cardinal/plugins/AaronStatic/src/plugin.cpp"
+#include "AaronStatic/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

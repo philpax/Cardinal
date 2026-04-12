@@ -1,7 +1,7 @@
 // Auto-generated — registration function for Bidoo
 // Renames init() only in the included file, not globally
 #define init init__Bidoo
-#include "/home/user/Cardinal/plugins/Bidoo/src/plugin.cpp"
+#include "Bidoo/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

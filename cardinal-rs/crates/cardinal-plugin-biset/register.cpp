@@ -1,7 +1,7 @@
 // Auto-generated — registration function for Biset
 // Renames init() only in the included file, not globally
 #define init init__Biset
-#include "/home/user/Cardinal/plugins/Biset/src/plugin.cpp"
+#include "Biset/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

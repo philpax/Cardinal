@@ -1,7 +1,7 @@
 // Auto-generated — registration function for RebelTech
 // Renames init() only in the included file, not globally
 #define init init__RebelTech
-#include "/home/user/Cardinal/plugins/RebelTech/src/plugin.cpp"
+#include "RebelTech/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

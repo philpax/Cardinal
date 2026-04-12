@@ -105,7 +105,7 @@ fn main() {
     build.file(plugins_dir.join("Mog/src/Nexus.cpp"));
 
     // Init wrapper (renames init() only for the plugin registration file)
-    build.file(std::path::Path::new("/home/user/Cardinal/cardinal-rs/crates/cardinal-plugin-mog/register.cpp"));
+    build.file(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("register.cpp"));
 
     build.compile("cardinal_plugin_mog");
 }

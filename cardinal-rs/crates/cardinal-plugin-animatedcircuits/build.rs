@@ -105,7 +105,7 @@ fn main() {
     collect_sources(&plugins_dir.join("AnimatedCircuits/src/LFold"), &_filter_out, &plugins_dir, &mut build, 0);
 
     // Init wrapper (renames init() only for the plugin registration file)
-    build.file(std::path::Path::new("/home/user/Cardinal/cardinal-rs/crates/cardinal-plugin-animatedcircuits/register.cpp"));
+    build.file(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("register.cpp"));
 
     build.compile("cardinal_plugin_animatedcircuits");
 }

@@ -1,7 +1,7 @@
 // Auto-generated — registration function for CVfunk
 // Renames init() only in the included file, not globally
 #define init init__CVfunk
-#include "/home/user/Cardinal/plugins/CVfunk/src/plugin.cpp"
+#include "CVfunk/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

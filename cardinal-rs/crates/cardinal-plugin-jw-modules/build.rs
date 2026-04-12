@@ -109,7 +109,7 @@ fn main() {
     build.file(plugins_dir.join("JW-Modules/src/Str1ker.cpp"));
 
     // Init wrapper (renames init() only for the plugin registration file)
-    build.file(std::path::Path::new("/home/user/Cardinal/cardinal-rs/crates/cardinal-plugin-jw-modules/register.cpp"));
+    build.file(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("register.cpp"));
 
     build.compile("cardinal_plugin_jw_modules");
 }

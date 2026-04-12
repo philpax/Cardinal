@@ -1,7 +1,7 @@
 // Auto-generated — registration function for Algoritmarte
 // Renames init() only in the included file, not globally
 #define init init__Algoritmarte
-#include "/home/user/Cardinal/plugins/Algoritmarte/src/plugin.cpp"
+#include "Algoritmarte/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

@@ -1,7 +1,7 @@
 // Auto-generated — registration function for CatroModulo
 // Renames init() only in the included file, not globally
 #define init init__CatroModulo
-#include "/home/user/Cardinal/plugins/CatroModulo/src/CatroModulo.cpp"
+#include "CatroModulo/src/CatroModulo.cpp"
 #undef init
 
 #include <rack.hpp>

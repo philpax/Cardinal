@@ -1,7 +1,7 @@
 // Auto-generated — registration function for JW-Modules
 // Renames init() only in the included file, not globally
 #define init init__JW
-#include "/home/user/Cardinal/plugins/JW-Modules/src/JWModules.cpp"
+#include "JW-Modules/src/JWModules.cpp"
 #undef init
 
 #include <rack.hpp>

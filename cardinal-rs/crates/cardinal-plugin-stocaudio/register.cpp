@@ -1,7 +1,7 @@
 // Auto-generated — registration function for stocaudio
 // Renames init() only in the included file, not globally
 #define init init__stocaudio
-#include "/home/user/Cardinal/plugins/stocaudio/src/plugin.cpp"
+#include "stocaudio/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

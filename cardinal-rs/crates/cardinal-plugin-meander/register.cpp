@@ -1,7 +1,7 @@
 // Auto-generated — registration function for Meander
 // Renames init() only in the included file, not globally
 #define init init__Meander
-#include "/home/user/Cardinal/plugins/Meander/src/plugin.cpp"
+#include "Meander/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

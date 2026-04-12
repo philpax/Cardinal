@@ -1,7 +1,7 @@
 // Auto-generated — registration function for admiral
 // Renames init() only in the included file, not globally
 #define init init__admiral
-#include "/home/user/Cardinal/plugins/admiral/src/plugin.cpp"
+#include "admiral/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

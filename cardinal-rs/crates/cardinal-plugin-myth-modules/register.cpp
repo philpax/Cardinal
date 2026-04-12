@@ -1,7 +1,7 @@
 // Auto-generated — registration function for myth-modules
 // Renames init() only in the included file, not globally
 #define init init__myth_modules
-#include "/home/user/Cardinal/plugins/myth-modules/src/plugin.cpp"
+#include "myth-modules/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

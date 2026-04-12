@@ -1,7 +1,7 @@
 // Auto-generated — registration function for repelzen
 // Renames init() only in the included file, not globally
 #define init init__repelzen
-#include "/home/user/Cardinal/plugins/repelzen/src/repelzen.cpp"
+#include "repelzen/src/repelzen.cpp"
 #undef init
 
 #include <rack.hpp>

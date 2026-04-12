@@ -1,7 +1,7 @@
 // Auto-generated — registration function for WhatTheRack
 // Renames init() only in the included file, not globally
 #define init init__WhatTheRack
-#include "/home/user/Cardinal/plugins/WhatTheRack/src/WhatTheRack.cpp"
+#include "WhatTheRack/src/WhatTheRack.cpp"
 #undef init
 
 #include <rack.hpp>

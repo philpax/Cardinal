@@ -1,7 +1,7 @@
 // Auto-generated — registration function for Orbits
 // Renames init() only in the included file, not globally
 #define init init__Orbits
-#include "/home/user/Cardinal/plugins/Orbits/src/plugin.cpp"
+#include "Orbits/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

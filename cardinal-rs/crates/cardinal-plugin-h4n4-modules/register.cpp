@@ -1,7 +1,7 @@
 // Auto-generated — registration function for h4n4-modules
 // Renames init() only in the included file, not globally
 #define init init__H4N4
-#include "/home/user/Cardinal/plugins/h4n4-modules/src/plugin.cpp"
+#include "h4n4-modules/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

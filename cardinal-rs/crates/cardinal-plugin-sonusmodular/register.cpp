@@ -1,7 +1,7 @@
 // Auto-generated — registration function for sonusmodular
 // Renames init() only in the included file, not globally
 #define init init__sonusmodular
-#include "/home/user/Cardinal/plugins/sonusmodular/src/sonusmodular.cpp"
+#include "sonusmodular/src/sonusmodular.cpp"
 #undef init
 
 #include <rack.hpp>

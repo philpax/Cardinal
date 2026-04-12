@@ -1,7 +1,7 @@
 // Auto-generated — registration function for WSTD-Drums
 // Renames init() only in the included file, not globally
 #define init init__WSTD_Drums
-#include "/home/user/Cardinal/plugins/WSTD-Drums/src/WSTD_Drums.cpp"
+#include "WSTD-Drums/src/WSTD_Drums.cpp"
 #undef init
 
 #include <rack.hpp>

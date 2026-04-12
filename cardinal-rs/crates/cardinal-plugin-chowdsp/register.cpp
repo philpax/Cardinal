@@ -1,7 +1,7 @@
 // Auto-generated — registration function for ChowDSP
 // Renames init() only in the included file, not globally
 #define init init__ChowDSP
-#include "/home/user/Cardinal/plugins/ChowDSP/src/plugin.cpp"
+#include "ChowDSP/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

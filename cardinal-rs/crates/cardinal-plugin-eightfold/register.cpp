@@ -1,7 +1,7 @@
 // Auto-generated — registration function for eightfold
 // Renames init() only in the included file, not globally
 #define init init__eightfold
-#include "/home/user/Cardinal/plugins/eightfold/src/plugin.cpp"
+#include "eightfold/src/plugin.cpp"
 #undef init
 
 #include <rack.hpp>

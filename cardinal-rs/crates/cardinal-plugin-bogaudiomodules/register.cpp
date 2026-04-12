@@ -1,7 +1,7 @@
 // Auto-generated — registration function for BogaudioModules
 // Renames init() only in the included file, not globally
 #define init init__BogaudioModules
-#include "/home/user/Cardinal/plugins/BogaudioModules/src/bogaudio.cpp"
+#include "BogaudioModules/src/bogaudio.cpp"
 #undef init
 
 #include <rack.hpp>
