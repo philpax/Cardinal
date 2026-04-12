@@ -4,9 +4,7 @@ pkgs.mkShell {
   name = "cardinal-rs";
 
   nativeBuildInputs = with pkgs; [
-    # Rust toolchain
-    rustc
-    cargo
+    # Rust toolchain provided by rustup on the host
 
     # C/C++ compiler (needed by cc crate)
     gcc
@@ -21,13 +19,14 @@ pkgs.mkShell {
     libsamplerate
     speexdsp
 
-    # OpenGL + EGL + GLEW (for NanoVG rendering)
-    libGL
-    libGLU
-    glew
-    libglvnd.dev  # provides EGL headers
+    # Vulkan (for wgpu backend)
+    vulkan-loader
+    vulkan-headers
 
-    # X11 (for egui/winit x11 backend)
+    # GL headers (Rack C++ code includes GL/gl.h via stubs)
+    libGL
+
+    # X11 (for winit x11 backend)
     xorg.libX11
     xorg.libXcursor
     xorg.libXrandr
@@ -42,13 +41,8 @@ pkgs.mkShell {
     libxkbcommon
   ];
 
-  # Ensure the linker and runtime can find libraries.
-  # /run/opengl-driver/lib contains the system GPU driver (e.g. NVIDIA's
-  # libEGL_nvidia.so). Without it, EGL falls back to Mesa software rendering.
   LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
-    pkgs.libGL
-    pkgs.glew
-    pkgs.libGL
+    pkgs.vulkan-loader
     pkgs.wayland
     pkgs.libxkbcommon
     pkgs.xorg.libX11
