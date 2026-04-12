@@ -13,40 +13,68 @@ extern std::string pluginManifest(const std::string& dirname);
 extern std::string pluginPath(const std::string& dirname);
 } }
 
-struct StaticPluginLoader {
-    rack::plugin::Plugin* const plugin;
-    FILE* file;
-    json_t* rootJ;
-    StaticPluginLoader(rack::plugin::Plugin* const p, const char* const name)
-        : plugin(p), file(nullptr), rootJ(nullptr)
-    {
-        p->path = rack::asset::pluginPath(name);
-        const std::string mf = rack::asset::pluginManifest(name);
-        if ((file = std::fopen(mf.c_str(), "r")) == nullptr) return;
-        json_error_t error;
-        if ((rootJ = json_loadf(file, 0, &error)) == nullptr) return;
-        json_t* const vJ = json_string((rack::APP_VERSION_MAJOR + ".0").c_str());
-        json_object_set(rootJ, "version", vJ);
-        json_decref(vJ);
-        p->fromJson(rootJ);
-    }
-    ~StaticPluginLoader() {
-        if (rootJ) {
-            json_t* const mJ = json_object_get(rootJ, "modules");
-            plugin->modulesFromJson(mJ);
-            json_decref(rootJ);
-            rack::plugin::plugins.push_back(plugin);
-        }
-        if (file) std::fclose(file);
-    }
-    bool ok() const noexcept { return rootJ != nullptr; }
-};
-
 extern "C" void cardinal_register_cf() {
     using namespace rack;
     using namespace rack::plugin;
     Plugin* const p = new Plugin;
     pluginInstance__cf = p;
-    const StaticPluginLoader spl(p, "cf");
-    if (spl.ok()) init__cf(p);
+
+    // Load manifest
+    p->path = rack::asset::pluginPath("cf");
+    const std::string mf = rack::asset::pluginManifest("cf");
+    FILE* file = std::fopen(mf.c_str(), "r");
+    if (!file) {
+        fprintf(stderr, "cardinal: WARNING: manifest not found for cf: %s\n", mf.c_str());
+        delete p;
+        pluginInstance__cf = nullptr;
+        return;
+    }
+    json_error_t error;
+    json_t* rootJ = json_loadf(file, 0, &error);
+    std::fclose(file);
+    if (!rootJ) {
+        fprintf(stderr, "cardinal: WARNING: failed to parse manifest for cf\n");
+        delete p;
+        pluginInstance__cf = nullptr;
+        return;
+    }
+
+    // Set version and parse plugin metadata
+    json_t* const vJ = json_string((rack::APP_VERSION_MAJOR + ".0").c_str());
+    json_object_set(rootJ, "version", vJ);
+    json_decref(vJ);
+    p->fromJson(rootJ);
+
+    // Call the plugin's init to register models via addModel()
+    try {
+        init__cf(p);
+    } catch (const std::exception& e) {
+        fprintf(stderr, "cardinal: WARNING: init failed for cf: %s\n", e.what());
+    }
+
+    // Match models to manifest modules (skip missing ones instead of throwing)
+    json_t* const mJ = json_object_get(rootJ, "modules");
+    if (mJ && json_array_size(mJ) > 0) {
+        std::list<Model*> ordered;
+        size_t moduleId;
+        json_t* moduleJ;
+        json_array_foreach(mJ, moduleId, moduleJ) {
+            json_t* slugJ = json_object_get(moduleJ, "slug");
+            if (!slugJ) continue;
+            std::string slug = json_string_value(slugJ);
+            auto it = std::find_if(p->models.begin(), p->models.end(),
+                [&](Model* m) { return m->slug == slug; });
+            if (it == p->models.end()) continue;  // skip missing models
+            Model* model = *it;
+            p->models.erase(it);
+            ordered.push_back(model);
+            try { model->fromJson(moduleJ); } catch (...) {}
+        }
+        // Keep any extra models that weren't in the manifest
+        for (auto* m : p->models) ordered.push_back(m);
+        p->models = ordered;
+    }
+
+    json_decref(rootJ);
+    rack::plugin::plugins.push_back(p);
 }
