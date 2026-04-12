@@ -147,15 +147,19 @@ fn spawn_cardinal_thread(
                         // Set render target and render
                         cardinal_core::nanovg_wgpu::set_render_target(nanovg_ctx, view, w, h);
                         unsafe { cardinal_core::ffi::nvgBeginFrame(nanovg_ctx, w as f32, h as f32, 1.0) };
-                        cc::module_render(module_id, nanovg_ctx, w as i32, h as i32);
+                        let ok = cc::module_render(module_id, nanovg_ctx, w as i32, h as i32);
                         unsafe { cardinal_core::ffi::nvgEndFrame(nanovg_ctx) };
 
-                        let _ = render_tx.send(RenderResult {
-                            module_id,
-                            width: w,
-                            height: h,
-                            texture,
-                        });
+                        // Only send the texture if the module actually rendered
+                        // (modules without widgets, like Audio I/O, return false)
+                        if ok {
+                            let _ = render_tx.send(RenderResult {
+                                module_id,
+                                width: w,
+                                height: h,
+                                texture,
+                            });
+                        }
                     }
                     Command::CreateAudio { reply } => {
                         let info = cc::audio_create().map(|id| {
@@ -456,7 +460,6 @@ impl App {
     }
 
     fn ui(&mut self, ctx: &egui::Context) {
-
         // ── Side panel: Module Browser ───────────────────────────────
         #[allow(deprecated)]
         egui::Panel::left("browser")
