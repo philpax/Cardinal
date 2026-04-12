@@ -169,6 +169,18 @@ pub struct WgpuNvgContext {
 
     // Frame state
     pub first_pass_of_frame: bool,
+
+    // Render target stack for FBO bind/unbind
+    pub render_target_stack: Vec<RenderTargetState>,
+}
+
+/// Saved render target state for FBO push/pop.
+pub struct RenderTargetState {
+    pub view: Option<wgpu::TextureView>,
+    pub stencil: Option<wgpu::Texture>,
+    pub stencil_view: Option<wgpu::TextureView>,
+    pub width: u32,
+    pub height: u32,
 }
 
 impl WgpuNvgContext {
@@ -212,6 +224,7 @@ impl WgpuNvgContext {
             render_target_width: 0,
             render_target_height: 0,
             first_pass_of_frame: true,
+            render_target_stack: Vec::new(),
         }
     }
 }
@@ -586,6 +599,78 @@ pub fn set_render_target(
 
     ctx.render_target_view = Some(target_view);
     ctx.first_pass_of_frame = true;
+}
+
+/// Called from C++ (nvgluBindFramebuffer) to switch the wgpu render target
+/// to the texture backing a NanoVG image (for FBO-based caching).
+///
+/// - `image >= 0`: push current target, switch to this image's texture
+/// - `image < 0`: pop and restore the previous target
+#[unsafe(no_mangle)]
+pub extern "C" fn nvg_wgpu_bind_framebuffer(
+    ctx_ptr: *mut ffi::NVGcontext,
+    image: i32,
+    width: i32,
+    height: i32,
+) {
+    if ctx_ptr.is_null() {
+        return;
+    }
+    let params = unsafe { ffi::nvgInternalParams(ctx_ptr) };
+    if params.is_null() {
+        return;
+    }
+    let uptr = unsafe { (*params).user_ptr };
+    let ctx = unsafe { ctx_from_uptr(uptr) };
+
+    if image >= 0 {
+        // Push current render target state
+        ctx.render_target_stack.push(RenderTargetState {
+            view: ctx.render_target_view.take(),
+            stencil: ctx.render_target_stencil.take(),
+            stencil_view: ctx.render_target_stencil_view.take(),
+            width: ctx.render_target_width,
+            height: ctx.render_target_height,
+        });
+
+        // Look up the texture for this NanoVG image
+        if let Some(tex_entry) = ctx.textures.get(&image) {
+            let view = tex_entry.texture.create_view(&wgpu::TextureViewDescriptor::default());
+            let w = width as u32;
+            let h = height as u32;
+
+            // Create stencil for this FBO size
+            let stencil_texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("nvg_fbo_stencil"),
+                size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: STENCIL_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            let stencil_view = stencil_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+            ctx.render_target_view = Some(view);
+            ctx.render_target_stencil = Some(stencil_texture);
+            ctx.render_target_stencil_view = Some(stencil_view);
+            ctx.render_target_width = w;
+            ctx.render_target_height = h;
+            ctx.first_pass_of_frame = true;
+        } else {
+            eprintln!("nvg_wgpu_bind_framebuffer: image {image} not found in texture registry");
+        }
+    } else {
+        // Pop: restore previous render target
+        if let Some(state) = ctx.render_target_stack.pop() {
+            ctx.render_target_view = state.view;
+            ctx.render_target_stencil = state.stencil;
+            ctx.render_target_stencil_view = state.stencil_view;
+            ctx.render_target_width = state.width;
+            ctx.render_target_height = state.height;
+        }
+    }
 }
 
 // ── NVGparams callbacks ─────────────────────────────────────────────
@@ -978,10 +1063,12 @@ unsafe extern "C" fn render_create_texture(
         1
     };
 
-    let mut usage = wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST;
-    if generate_mipmaps {
-        usage |= wgpu::TextureUsages::RENDER_ATTACHMENT;
-    }
+    // RENDER_ATTACHMENT is always needed: textures may be used as FBO targets
+    // by FramebufferWidget for offscreen caching of SVG panels, knobs, etc.
+    let usage = wgpu::TextureUsages::TEXTURE_BINDING
+        | wgpu::TextureUsages::COPY_DST
+        | wgpu::TextureUsages::RENDER_ATTACHMENT;
+    let _ = generate_mipmaps; // kept for future mipmap generation
 
     let texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
         label: Some(&format!("nvg_texture_{id}")),

@@ -375,12 +375,63 @@ extern "C" {
     void glClear(GLbitfield) {}
 }
 
-// ── NanoVG GL utility stubs ────────────────────────────────────────
+// ── NanoVG GL utility — wgpu-backed framebuffers ───────────────────
 // FramebufferWidget uses nvglu framebuffer functions for offscreen
-// rendering. With our wgpu backend, these are no-ops.
-// Declared with C++ linkage to match nanovg_gl_utils.h
+// rendering. We implement these on top of NanoVG images (which our
+// wgpu backend handles) and the wgpu render-target switching API.
+//
+// NVGLUframebuffer is defined in nanovg_gl_utils.h with GL-specific
+// fields (fbo, rbo, texture). We only use ctx and image; the GL
+// fields are set to 0.
+#include <nanovg.h>
 #include <nanovg_gl_utils.h>
 
-NVGLUframebuffer* nvgluCreateFramebuffer(NVGcontext*, int, int, int) { return nullptr; }
-void nvgluBindFramebuffer(NVGLUframebuffer*) {}
-void nvgluDeleteFramebuffer(NVGLUframebuffer*) {}
+// Implemented in Rust (nanovg_wgpu.rs): switch the wgpu render target
+// to the texture backing the given NanoVG image, or restore the
+// previous target if image < 0.
+extern "C" void nvg_wgpu_bind_framebuffer(NVGcontext* ctx, int image, int width, int height);
+
+NVGLUframebuffer* nvgluCreateFramebuffer(NVGcontext* ctx, int w, int h, int imageFlags) {
+    if (!ctx || w <= 0 || h <= 0) return nullptr;
+
+    // Create a NanoVG image — our wgpu backend allocates a wgpu::Texture
+    int image = nvgCreateImageRGBA(ctx, w, h,
+        imageFlags | NVG_IMAGE_FLIPY | NVG_IMAGE_PREMULTIPLIED, nullptr);
+    if (image <= 0) return nullptr;
+
+    auto* fb = (NVGLUframebuffer*)malloc(sizeof(NVGLUframebuffer));
+    if (!fb) {
+        nvgDeleteImage(ctx, image);
+        return nullptr;
+    }
+    memset(fb, 0, sizeof(NVGLUframebuffer));
+    fb->ctx = ctx;
+    fb->image = image;
+    // fbo, rbo, texture left as 0 — not used by wgpu backend
+    return fb;
+}
+
+static NVGcontext* s_boundFbCtx = nullptr;
+
+void nvgluBindFramebuffer(NVGLUframebuffer* fb) {
+    if (fb && fb->ctx) {
+        // Bind: switch render target to this framebuffer's image texture
+        s_boundFbCtx = fb->ctx;
+        int w = 0, h = 0;
+        nvgImageSize(fb->ctx, fb->image, &w, &h);
+        nvg_wgpu_bind_framebuffer(fb->ctx, fb->image, w, h);
+    } else if (s_boundFbCtx) {
+        // Unbind: restore the previous render target
+        nvg_wgpu_bind_framebuffer(s_boundFbCtx, -1, 0, 0);
+        s_boundFbCtx = nullptr;
+    }
+}
+
+void nvgluDeleteFramebuffer(NVGLUframebuffer* fb) {
+    if (!fb) return;
+    if (fb->image >= 0 && fb->ctx)
+        nvgDeleteImage(fb->ctx, fb->image);
+    fb->ctx = nullptr;
+    fb->image = -1;
+    free(fb);
+}
