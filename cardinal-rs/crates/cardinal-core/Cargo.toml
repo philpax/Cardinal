@@ -9,5 +9,5 @@ pkg-config = "0.3"
 
 [dependencies]
 cardinal-plugins-registry = { path = "../cardinal-plugins-registry" }
-wgpu = "24"
+wgpu = "29"
 pollster = "0.4"

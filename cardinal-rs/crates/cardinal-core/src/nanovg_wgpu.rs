@@ -211,7 +211,7 @@ fn create_pipeline(
         },
         depth_stencil,
         multisample: wgpu::MultisampleState::default(),
-        multiview: None,
+        multiview_mask: None,
         cache: None,
     })
 }
@@ -261,8 +261,8 @@ fn stencil_state(
 ) -> wgpu::DepthStencilState {
     wgpu::DepthStencilState {
         format: STENCIL_FORMAT,
-        depth_write_enabled: false,
-        depth_compare: wgpu::CompareFunction::Always,
+        depth_write_enabled: Some(false),
+        depth_compare: Some(wgpu::CompareFunction::Always),
         stencil: wgpu::StencilState {
             front,
             back,
@@ -356,8 +356,8 @@ unsafe extern "C" fn render_create(uptr: *mut c_void, _other_uptr: *mut c_void) 
     // 3. Pipeline layout
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("nvg_pipeline_layout"),
-        bind_group_layouts: &[&view_bind_group_layout, &texture_bind_group_layout],
-        push_constant_ranges: &[],
+        bind_group_layouts: &[Some(&view_bind_group_layout), Some(&texture_bind_group_layout)],
+        immediate_size: 0,
     });
 
     // 4. Choose fragment entry point based on AA flag
@@ -558,7 +558,7 @@ unsafe extern "C" fn render_create(uptr: *mut c_void, _other_uptr: *mut c_void) 
         label: Some("nvg_default_sampler"),
         mag_filter: wgpu::FilterMode::Linear,
         min_filter: wgpu::FilterMode::Linear,
-        mipmap_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::MipmapFilterMode::Linear,
         address_mode_u: wgpu::AddressMode::ClampToEdge,
         address_mode_v: wgpu::AddressMode::ClampToEdge,
         ..Default::default()
@@ -568,7 +568,7 @@ unsafe extern "C" fn render_create(uptr: *mut c_void, _other_uptr: *mut c_void) 
         label: Some("nvg_nearest_sampler"),
         mag_filter: wgpu::FilterMode::Nearest,
         min_filter: wgpu::FilterMode::Nearest,
-        mipmap_filter: wgpu::FilterMode::Nearest,
+        mipmap_filter: wgpu::MipmapFilterMode::Nearest,
         address_mode_u: wgpu::AddressMode::ClampToEdge,
         address_mode_v: wgpu::AddressMode::ClampToEdge,
         ..Default::default()
