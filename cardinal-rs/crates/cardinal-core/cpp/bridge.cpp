@@ -16,6 +16,9 @@
 #include <app/CableWidget.hpp>
 #include <app/RackWidget.hpp>
 #include <app/SvgPanel.hpp>
+#include <app/SvgPort.hpp>
+#include <componentlibrary.hpp>
+#include <helpers.hpp>
 #include <widget/FramebufferWidget.hpp>
 #include <context.hpp>
 #include <settings.hpp>
@@ -79,6 +82,55 @@ struct AudioIOModule : rack::engine::TerminalModule {
     }
 };
 
+// ── AudioIO widget — SVG panel + port widgets ───────────────────────
+struct AudioIOWidget : rack::app::ModuleWidget {
+    AudioIOWidget(AudioIOModule* module) {
+        setModule(module);
+        setPanel(rack::window::Svg::load(
+            rack::asset::system("../../plugins/Cardinal/res/HostAudio.svg")));
+
+        // Inputs: audio from patch -> speakers (left column)
+        // 8HP panel = 120px wide. Positions match Cardinal's HostAudio layout.
+        addInput(rack::createInputCentered<rack::componentlibrary::PJ301MPort>(
+            rack::math::Vec(30.0f, 220.0f), module, 0));
+        addInput(rack::createInputCentered<rack::componentlibrary::PJ301MPort>(
+            rack::math::Vec(30.0f, 275.0f), module, 1));
+
+        // Outputs: audio from mic/input -> patch (right column)
+        addOutput(rack::createOutputCentered<rack::componentlibrary::PJ301MPort>(
+            rack::math::Vec(90.0f, 220.0f), module, 0));
+        addOutput(rack::createOutputCentered<rack::componentlibrary::PJ301MPort>(
+            rack::math::Vec(90.0f, 275.0f), module, 1));
+    }
+
+    void draw(const DrawArgs& args) override {
+        ModuleWidget::draw(args);
+
+        NVGcontext* vg = args.vg;
+
+        // Title
+        nvgFontSize(vg, 13.0f);
+        nvgFillColor(vg, nvgRGBf(1.0f, 1.0f, 1.0f));
+        nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+        nvgText(vg, box.size.x * 0.5f, 30.0f, "Audio I/O", nullptr);
+
+        // Port labels
+        nvgFontSize(vg, 10.0f);
+        nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
+        nvgText(vg, 30.0f, 210.0f, "L", nullptr);
+        nvgText(vg, 30.0f, 265.0f, "R", nullptr);
+        nvgText(vg, 90.0f, 210.0f, "L", nullptr);
+        nvgText(vg, 90.0f, 265.0f, "R", nullptr);
+
+        // Section labels
+        nvgFontSize(vg, 9.0f);
+        nvgFillColor(vg, nvgRGBf(0.7f, 0.7f, 0.7f));
+        nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+        nvgText(vg, 30.0f, 190.0f, "TO SPKR", nullptr);
+        nvgText(vg, 90.0f, 190.0f, "FROM IN", nullptr);
+    }
+};
+
 // Model for AudioIO (needed so the engine recognises it as a terminal module)
 struct AudioIOModel : rack::plugin::Model {
     rack::engine::Module* createModule() override {
@@ -86,8 +138,8 @@ struct AudioIOModel : rack::plugin::Model {
         m->model = this;
         return m;
     }
-    rack::app::ModuleWidget* createModuleWidget(rack::engine::Module*) override {
-        return nullptr;  // No widget — this is a bridge module
+    rack::app::ModuleWidget* createModuleWidget(rack::engine::Module* m) override {
+        return new AudioIOWidget(static_cast<AudioIOModule*>(m));
     }
 };
 
@@ -521,7 +573,18 @@ ModuleHandle cardinal_audio_create(void) {
     g_audioIO = module;
 
     int64_t handle = module->id;
-    g_modules[handle] = { module, nullptr, &g_audioIOModel };
+
+    // Create widget for rendering
+    rack::app::ModuleWidget* widget = nullptr;
+    if (!rack::settings::headless) {
+        try {
+            widget = g_audioIOModel.createModuleWidget(module);
+        } catch (...) {
+            fprintf(stderr, "cardinal: failed to create AudioIO widget\n");
+        }
+    }
+
+    g_modules[handle] = { module, widget, &g_audioIOModel };
     return handle;
 }
 
