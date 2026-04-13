@@ -766,9 +766,21 @@ void cardinal_audio_process(int frames, const float* input_buf, float* output_bu
         memset(g_audioIO->inputBuf, 0, frames * 2 * sizeof(float));
     }
 
-    // Reset frame counter and process
-    g_audioIO->frameIndex = 0;
-    g_engine->stepBlock(frames);
+    // Note: we use the standard Rack engine (not Cardinal's override) which
+    // doesn't know about TerminalModule. So we manually call the terminal
+    // processing hooks around each single-sample engine step.
+    // This must be per-sample because terminal I/O sets/reads port voltages
+    // that change each sample.
+    rack::engine::Module::ProcessArgs pargs;
+    pargs.sampleRate = g_engine->getSampleRate();
+    pargs.sampleTime = 1.0f / pargs.sampleRate;
+
+    for (int i = 0; i < frames; i++) {
+        g_audioIO->frameIndex = i;
+        g_audioIO->processTerminalInput(pargs);
+        g_engine->stepBlock(1);
+        g_audioIO->processTerminalOutput(pargs);
+    }
 
     // Copy output audio from the terminal module's buffer
     if (output_buf) {
