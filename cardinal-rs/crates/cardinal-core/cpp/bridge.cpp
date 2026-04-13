@@ -516,6 +516,11 @@ int cardinal_module_render(ModuleHandle h, NVGcontext* vg, int width, int height
 
     auto* widget = it->second.widget;
 
+    // step() propagates dirty flags, updates animations, lights, and
+    // visual state through the widget tree. Without it, FramebufferWidgets
+    // never re-render after param changes, and lights/meters don't animate.
+    widget->step();
+
     rack::widget::Widget::DrawArgs args;
     args.vg = vg;
     args.clipBox = rack::math::Rect(
