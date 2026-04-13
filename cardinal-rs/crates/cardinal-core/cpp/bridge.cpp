@@ -364,8 +364,26 @@ void cardinal_module_destroy(ModuleHandle h) {
     auto it = g_modules.find(h);
     if (it == g_modules.end()) return;
 
+    // Clear audio pointer BEFORE removing from engine, so the audio
+    // callback stops using it. The audio callback checks g_audioIO
+    // before each stepBlock(1) call.
     if (it->second.module == g_audioIO)
         g_audioIO = nullptr;
+
+    // Remove all cables connected to this module first
+    std::vector<int64_t> cables_to_remove;
+    for (auto& [cid, cable] : g_cables) {
+        if (cable->outputModule == it->second.module || cable->inputModule == it->second.module)
+            cables_to_remove.push_back(cid);
+    }
+    for (auto cid : cables_to_remove) {
+        auto cit = g_cables.find(cid);
+        if (cit != g_cables.end()) {
+            g_engine->removeCable(cit->second);
+            delete cit->second;
+            g_cables.erase(cit);
+        }
+    }
 
     if (it->second.widget)
         delete it->second.widget;
