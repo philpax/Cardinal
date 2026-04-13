@@ -194,6 +194,17 @@ unsafe extern "C" {
 
     pub fn cardinal_module_render(h: i64, vg: *mut NVGcontext, width: i32, height: i32) -> i32;
 
+    pub fn cardinal_module_event(
+        h: i64, event_type: c_int,
+        x: f32, y: f32,
+        button: c_int, action: c_int, mods: c_int,
+        scroll_x: f32, scroll_y: f32,
+    ) -> c_int;
+
+    pub fn cardinal_module_check_port_drag(
+        h: i64, port_id: *mut c_int, is_output: *mut c_int,
+    ) -> c_int;
+
     pub fn cardinal_set_vg(vg: *mut NVGcontext, fb_vg: *mut NVGcontext);
 
     pub fn cardinal_audio_create() -> i64;

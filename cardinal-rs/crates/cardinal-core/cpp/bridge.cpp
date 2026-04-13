@@ -160,6 +160,11 @@ struct ModuleEntry {
     rack::engine::Module* module = nullptr;
     rack::app::ModuleWidget* widget = nullptr;
     rack::plugin::Model* model = nullptr;
+    // Per-module event state
+    rack::widget::Widget* hoveredWidget = nullptr;
+    rack::widget::Widget* draggedWidget = nullptr;
+    int dragButton = -1;
+    rack::math::Vec lastMousePos;
 };
 static std::unordered_map<int64_t, ModuleEntry> g_modules;
 static std::unordered_map<int64_t, rack::engine::Cable*> g_cables;
@@ -518,6 +523,154 @@ int cardinal_module_render(ModuleHandle h, NVGcontext* vg, int width, int height
     widget->draw(args);
     widget->drawLayer(args, 1);
 
+    return 1;
+}
+
+// ── Event forwarding ─────────────────────────────────────────────────
+
+int cardinal_module_event(ModuleHandle h, int event_type,
+                          float x, float y,
+                          int button, int action, int mods,
+                          float scroll_x, float scroll_y) {
+    auto it = g_modules.find(h);
+    if (it == g_modules.end() || !it->second.widget) return 0;
+
+    auto* widget = it->second.widget;
+    auto& entry = it->second;
+    rack::math::Vec pos(x, y);
+    rack::math::Vec mouseDelta = pos.minus(entry.lastMousePos);
+
+    switch (event_type) {
+    case CARDINAL_EVENT_HOVER: {
+        if (entry.draggedWidget) {
+            rack::widget::Widget::DragMoveEvent eDragMove;
+            eDragMove.button = entry.dragButton;
+            eDragMove.mouseDelta = mouseDelta;
+            entry.draggedWidget->onDragMove(eDragMove);
+            entry.lastMousePos = pos;
+            return 1;
+        }
+        rack::widget::EventContext cHover;
+        rack::widget::Widget::HoverEvent eHover;
+        eHover.context = &cHover;
+        eHover.pos = pos;
+        eHover.mouseDelta = mouseDelta;
+        widget->onHover(eHover);
+
+        // Track enter/leave
+        rack::widget::Widget* newHovered = cHover.target;
+        if (newHovered != entry.hoveredWidget) {
+            if (entry.hoveredWidget) {
+                rack::widget::Widget::LeaveEvent eLeave;
+                entry.hoveredWidget->onLeave(eLeave);
+            }
+            if (newHovered) {
+                rack::widget::EventContext cEnter;
+                cEnter.target = newHovered;
+                rack::widget::Widget::EnterEvent eEnter;
+                eEnter.context = &cEnter;
+                newHovered->onEnter(eEnter);
+            }
+            entry.hoveredWidget = newHovered;
+        }
+        entry.lastMousePos = pos;
+        return (cHover.target && cHover.target != widget) ? 1 : 0;
+    }
+    case CARDINAL_EVENT_BUTTON: {
+        if (action == GLFW_RELEASE && entry.draggedWidget) {
+            rack::widget::Widget::DragEndEvent eDragEnd;
+            eDragEnd.button = entry.dragButton;
+            entry.draggedWidget->onDragEnd(eDragEnd);
+            entry.draggedWidget = nullptr;
+            entry.dragButton = -1;
+        }
+        rack::widget::EventContext cButton;
+        rack::widget::Widget::ButtonEvent eButton;
+        eButton.context = &cButton;
+        eButton.pos = pos;
+        eButton.button = button;
+        eButton.action = action;
+        eButton.mods = mods;
+        widget->onButton(eButton);
+
+        if (action == GLFW_PRESS && cButton.consumed) {
+            rack::widget::Widget* target = cButton.target;
+            if (target && target != widget) {
+                entry.draggedWidget = target;
+                entry.dragButton = button;
+                rack::widget::EventContext cDragStart;
+                cDragStart.target = target;
+                rack::widget::Widget::DragStartEvent eDragStart;
+                eDragStart.context = &cDragStart;
+                eDragStart.button = button;
+                target->onDragStart(eDragStart);
+            }
+            entry.lastMousePos = pos;
+            return (target && target != widget) ? 1 : 0;
+        }
+        entry.lastMousePos = pos;
+        return (cButton.consumed && cButton.target && cButton.target != widget) ? 1 : 0;
+    }
+    case CARDINAL_EVENT_SCROLL: {
+        rack::widget::EventContext cScroll;
+        rack::widget::Widget::HoverScrollEvent eScroll;
+        eScroll.context = &cScroll;
+        eScroll.pos = pos;
+        eScroll.scrollDelta = rack::math::Vec(scroll_x, scroll_y);
+        widget->onHoverScroll(eScroll);
+        return (cScroll.target && cScroll.target != widget) ? 1 : 0;
+    }
+    case CARDINAL_EVENT_LEAVE: {
+        if (entry.hoveredWidget) {
+            rack::widget::Widget::LeaveEvent eLeave;
+            entry.hoveredWidget->onLeave(eLeave);
+            entry.hoveredWidget = nullptr;
+        }
+        if (entry.draggedWidget) {
+            rack::widget::Widget::DragEndEvent eDragEnd;
+            eDragEnd.button = entry.dragButton;
+            entry.draggedWidget->onDragEnd(eDragEnd);
+            entry.draggedWidget = nullptr;
+            entry.dragButton = -1;
+        }
+        return 0;
+    }
+    default: return 0;
+    }
+}
+
+int cardinal_module_check_port_drag(ModuleHandle h, int* port_id, int* is_output) {
+    auto it = g_modules.find(h);
+    if (it == g_modules.end() || !it->second.widget) return 0;
+    if (!it->second.draggedWidget) return 0;
+
+    auto* widget = it->second.widget;
+
+    for (int i = 0; i < (int)widget->module->getNumInputs(); i++) {
+        if (widget->getInput(i) == it->second.draggedWidget) {
+            *port_id = i;
+            *is_output = 0;
+            goto found;
+        }
+    }
+    for (int i = 0; i < (int)widget->module->getNumOutputs(); i++) {
+        if (widget->getOutput(i) == it->second.draggedWidget) {
+            *port_id = i;
+            *is_output = 1;
+            goto found;
+        }
+    }
+    return 0;
+
+found:
+    // Cancel Rack's drag
+    {
+        rack::widget::Widget::DragEndEvent eDragEnd;
+        eDragEnd.button = it->second.dragButton;
+        it->second.draggedWidget->onDragEnd(eDragEnd);
+    }
+    it->second.draggedWidget = nullptr;
+    it->second.dragButton = -1;
     return 1;
 }
 

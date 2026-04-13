@@ -193,6 +193,45 @@ pub fn module_get_input_voltage(id: ModuleId, port_id: i32) -> f32 {
     unsafe { ffi::cardinal_module_get_input_voltage(id.0, port_id) }
 }
 
+// ── Event forwarding ────────────────────────────────────────────────
+
+pub const EVENT_HOVER: i32 = 0;
+pub const EVENT_BUTTON: i32 = 1;
+pub const EVENT_SCROLL: i32 = 2;
+pub const EVENT_LEAVE: i32 = 3;
+
+/// Forward a UI event to a module widget. Returns true if a child widget
+/// (not the ModuleWidget itself) consumed the event.
+pub fn module_event(
+    id: ModuleId, event_type: i32,
+    x: f32, y: f32, button: i32, action: i32, mods: i32,
+    scroll_x: f32, scroll_y: f32,
+) -> bool {
+    unsafe {
+        ffi::cardinal_module_event(id.0, event_type, x, y, button, action, mods, scroll_x, scroll_y) != 0
+    }
+}
+
+/// Information about a port drag initiated by a widget interaction.
+#[derive(Debug, Clone)]
+pub struct PortDragInfo {
+    pub port_id: i32,
+    pub is_output: bool,
+}
+
+/// Check if the currently-dragged widget is a port. If so, returns the
+/// port info and cancels Rack's internal drag state.
+pub fn module_check_port_drag(id: ModuleId) -> Option<PortDragInfo> {
+    let mut port_id: i32 = 0;
+    let mut is_output: i32 = 0;
+    let result = unsafe { ffi::cardinal_module_check_port_drag(id.0, &mut port_id, &mut is_output) };
+    if result != 0 {
+        Some(PortDragInfo { port_id, is_output: is_output != 0 })
+    } else {
+        None
+    }
+}
+
 /// Render a module widget using the provided NanoVG context.
 /// Returns true on success.
 pub fn module_render(id: ModuleId, vg: *mut ffi::NVGcontext, width: i32, height: i32) -> bool {

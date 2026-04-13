@@ -77,6 +77,25 @@ void cardinal_set_vg(NVGcontext* vg, NVGcontext* fb_vg);
 /// Returns 1 on success, 0 on failure.
 int cardinal_module_render(ModuleHandle h, NVGcontext* vg, int width, int height);
 
+// ── Event forwarding ─────────────────────────────────────────────────
+
+// Event types for cardinal_module_event
+#define CARDINAL_EVENT_HOVER       0
+#define CARDINAL_EVENT_BUTTON      1
+#define CARDINAL_EVENT_SCROLL      2
+#define CARDINAL_EVENT_LEAVE       3
+
+/// Forward a UI event to a module widget. Returns 1 if a child widget
+/// (not the ModuleWidget itself) consumed the event, 0 otherwise.
+int cardinal_module_event(ModuleHandle h, int event_type,
+                          float x, float y,
+                          int button, int action, int mods,
+                          float scroll_x, float scroll_y);
+
+/// Check if the currently-dragged widget is a port. If so, writes the
+/// port id and direction, cancels Rack's drag, and returns 1.
+int cardinal_module_check_port_drag(ModuleHandle h, int* port_id, int* is_output);
+
 // ── Cable management ─────────────────────────────────────────────────
 CableHandle cardinal_cable_create(
     ModuleHandle out_module, int out_port,
