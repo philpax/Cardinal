@@ -364,6 +364,12 @@ void cardinal_module_destroy(ModuleHandle h) {
     auto it = g_modules.find(h);
     if (it == g_modules.end()) return;
 
+    fprintf(stderr, "cardinal: destroying module handle=%ld model=%s/%s is_audioIO=%d\n",
+            (long)h,
+            it->second.model ? it->second.model->plugin ? it->second.model->plugin->slug.c_str() : "?" : "?",
+            it->second.model ? it->second.model->slug.c_str() : "?",
+            it->second.module == g_audioIO);
+
     // Clear audio pointer BEFORE removing from engine, so the audio
     // callback stops using it. The audio callback checks g_audioIO
     // before each stepBlock(1) call.

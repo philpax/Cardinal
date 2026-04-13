@@ -80,7 +80,8 @@ fn build_rack_engine(rack_src: &PathBuf, includes: &[PathBuf]) {
 
     let mut build = cc::Build::new();
     build.cpp(true).std("c++17").warnings(false)
-        .define("PRIVATE", "").define("ARCH_X64", None).define("ARCH_LIN", None);
+        .define("PRIVATE", "").define("ARCH_X64", None).define("ARCH_LIN", None)
+        .define("NDEBUG", None);  // Disable asserts in engine (removeModule assert issue)
     for d in includes { build.include(d); }
 
     for entry in walkdir(rack_src.to_str().unwrap()) {
@@ -93,6 +94,7 @@ fn build_rack_engine(rack_src: &PathBuf, includes: &[PathBuf]) {
         if skip.contains(&stem) { continue; }
         build.file(&path);
     }
+
     // Use cargo_metadata=false to prevent cc from emitting its own
     // cargo:rustc-link-lib directive. We emit it manually with +whole-archive.
     build.cargo_metadata(false);
