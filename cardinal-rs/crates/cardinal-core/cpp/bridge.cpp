@@ -133,10 +133,14 @@ struct AudioIOWidget : rack::app::ModuleWidget {
 };
 
 // Model for AudioIO (needed so the engine recognises it as a terminal module)
+static AudioIOModule* g_audioIO = nullptr;
+
 struct AudioIOModel : rack::plugin::Model {
     rack::engine::Module* createModule() override {
+        if (g_audioIO) return nullptr;  // only one allowed
         auto* m = new AudioIOModule();
         m->model = this;
+        g_audioIO = m;  // set global so audio_process can find it
         return m;
     }
     rack::app::ModuleWidget* createModuleWidget(rack::engine::Module* m) override {
@@ -145,7 +149,6 @@ struct AudioIOModel : rack::plugin::Model {
 };
 
 static AudioIOModel g_audioIOModel;
-static AudioIOModule* g_audioIO = nullptr;
 
 // ── Internal state ───────────────────────────────────────────────────
 
@@ -360,6 +363,9 @@ ModuleHandle cardinal_module_create(const char* plugin_slug, const char* model_s
 void cardinal_module_destroy(ModuleHandle h) {
     auto it = g_modules.find(h);
     if (it == g_modules.end()) return;
+
+    if (it->second.module == g_audioIO)
+        g_audioIO = nullptr;
 
     if (it->second.widget)
         delete it->second.widget;
