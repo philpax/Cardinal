@@ -9,6 +9,11 @@ use winit::window::{Window, WindowId, WindowAttributes};
 
 // ── Messages between UI and Cardinal thread ─────────────────────────
 
+struct EventResult {
+    consumed: bool,
+    port_drag: Option<cc::PortDragInfo>,
+}
+
 enum Command {
     CreateModule {
         plugin: String,
@@ -23,10 +28,17 @@ enum Command {
         in_port: i32,
         reply: mpsc::Sender<Option<CableId>>,
     },
-    SetParam {
-        module: ModuleId,
-        param_id: i32,
-        value: f32,
+    ModuleEvent {
+        module_id: ModuleId,
+        event_type: i32,
+        x: f32,
+        y: f32,
+        button: i32,
+        action: i32,
+        mods: i32,
+        scroll_x: f32,
+        scroll_y: f32,
+        reply: Option<mpsc::Sender<EventResult>>,
     },
     RenderModule {
         module_id: ModuleId,
@@ -45,7 +57,6 @@ struct ModuleInfo {
     size: (f32, f32),
     inputs: Vec<cc::PortInfo>,
     outputs: Vec<cc::PortInfo>,
-    params: Vec<cc::ParamInfo>,
 }
 
 struct RenderResult {
@@ -93,7 +104,6 @@ fn spawn_cardinal_thread(
                                 size: (w.max(90.0), h.max(200.0)),
                                 inputs: cc::module_inputs(id),
                                 outputs: cc::module_outputs(id),
-                                params: cc::module_params(id),
                             }
                         });
                         let _ = reply.send(info);
@@ -111,12 +121,36 @@ fn spawn_cardinal_thread(
                         let id = cc::cable_create(out_mod, out_port, in_mod, in_port);
                         let _ = reply.send(id);
                     }
-                    Command::SetParam {
-                        module,
-                        param_id,
-                        value,
+                    Command::ModuleEvent {
+                        module_id,
+                        event_type,
+                        x,
+                        y,
+                        button,
+                        action,
+                        mods,
+                        scroll_x,
+                        scroll_y,
+                        reply,
                     } => {
-                        cc::module_set_param(module, param_id, value);
+                        let consumed = cc::module_event(
+                            module_id, event_type, x, y, button, action, mods, scroll_x,
+                            scroll_y,
+                        );
+                        if let Some(reply) = reply {
+                            let port_drag = if event_type == cc::EVENT_BUTTON
+                                && action == 1
+                                && consumed
+                            {
+                                cc::module_check_port_drag(module_id)
+                            } else {
+                                None
+                            };
+                            let _ = reply.send(EventResult {
+                                consumed,
+                                port_drag,
+                            });
+                        }
                     }
                     Command::RenderModule {
                         module_id,
@@ -274,7 +308,6 @@ struct PlacedModule {
     size: egui::Vec2,
     inputs: Vec<cc::PortInfo>,
     outputs: Vec<cc::PortInfo>,
-    params: Vec<cc::ParamInfo>,
     texture_id: Option<egui::TextureId>,
     render_texture: Option<wgpu::Texture>,
 }
@@ -294,14 +327,6 @@ enum DragState {
         is_output: bool,
         mouse_pos: egui::Pos2,
     },
-    Knob {
-        module_idx: usize,
-        param_id: i32,
-        start_value: f32,
-        start_y: f32,
-        min: f32,
-        max: f32,
-    },
     Module {
         module_idx: usize,
     },
@@ -312,9 +337,27 @@ struct App {
     cables: Vec<Cable>,
     catalog: Vec<cc::CatalogEntry>,
     drag: Option<DragState>,
+    active_module_drag: Option<ModuleId>,
     browser_filter: String,
     cmd_tx: mpsc::Sender<Command>,
     render_rx: mpsc::Receiver<RenderResult>,
+}
+
+fn egui_mods_to_rack(modifiers: &egui::Modifiers) -> i32 {
+    let mut mods = 0i32;
+    if modifiers.shift {
+        mods |= 1;
+    }
+    if modifiers.ctrl {
+        mods |= 2;
+    }
+    if modifiers.alt {
+        mods |= 4;
+    }
+    if modifiers.mac_cmd || modifiers.command {
+        mods |= 8;
+    }
+    mods
 }
 
 impl App {
@@ -329,6 +372,7 @@ impl App {
             cables: Vec::new(),
             catalog,
             drag: None,
+            active_module_drag: None,
             browser_filter: String::new(),
             cmd_tx,
             render_rx,
@@ -355,7 +399,6 @@ impl App {
                 size: egui::vec2(info.size.0, info.size.1),
                 inputs: info.inputs,
                 outputs: info.outputs,
-                params: info.params,
                 texture_id: None,
                 render_texture: None,
             });
@@ -383,16 +426,48 @@ impl App {
         None
     }
 
-    fn find_knob_at(&self, pos: egui::Pos2) -> Option<(usize, &cc::ParamInfo)> {
-        for (idx, m) in self.modules.iter().enumerate() {
-            for param in &m.params {
-                let pp = m.pos + egui::vec2(param.x, param.y);
-                if pp.distance(pos) < 16.0 {
-                    return Some((idx, param));
-                }
-            }
+    fn send_module_event(
+        &self,
+        module_id: ModuleId,
+        event_type: i32,
+        x: f32,
+        y: f32,
+        button: i32,
+        action: i32,
+        mods: i32,
+        scroll_x: f32,
+        scroll_y: f32,
+    ) -> Option<EventResult> {
+        if event_type == cc::EVENT_BUTTON && action == 1 {
+            let (reply_tx, reply_rx) = mpsc::channel();
+            let _ = self.cmd_tx.send(Command::ModuleEvent {
+                module_id,
+                event_type,
+                x,
+                y,
+                button,
+                action,
+                mods,
+                scroll_x,
+                scroll_y,
+                reply: Some(reply_tx),
+            });
+            reply_rx.recv().ok()
+        } else {
+            let _ = self.cmd_tx.send(Command::ModuleEvent {
+                module_id,
+                event_type,
+                x,
+                y,
+                button,
+                action,
+                mods,
+                scroll_x,
+                scroll_y,
+                reply: None,
+            });
+            None
         }
-        None
     }
 
     fn request_renders(&self) {
@@ -441,7 +516,7 @@ impl App {
                 ui.separator();
 
                 ui.label(
-                    egui::RichText::new("Click to add | Drag ports to cable | Drag knobs up/down")
+                    egui::RichText::new("Click to add | Drag ports to cable | Interact with widgets")
                         .small()
                         .weak(),
                 );
@@ -513,23 +588,37 @@ impl App {
             for (idx, response) in &responses {
                 if response.drag_started() {
                     if let Some(pos) = response.interact_pointer_pos() {
-                        if let Some((knob_idx, param)) = self.find_knob_at(pos) {
-                            let val = cc::module_get_param(self.modules[knob_idx].id, param.id);
-                            self.drag = Some(DragState::Knob {
-                                module_idx: knob_idx,
-                                param_id: param.id,
-                                start_value: val,
-                                start_y: pos.y,
-                                min: param.min,
-                                max: param.max,
-                            });
-                        } else if let Some((mid, pid, is_out)) = self.find_port_at(pos) {
-                            self.drag = Some(DragState::Cable {
-                                from_module: mid,
-                                from_port: pid,
-                                is_output: is_out,
-                                mouse_pos: pos,
-                            });
+                        let m = &self.modules[*idx];
+                        let local_x = pos.x - m.pos.x;
+                        let local_y = pos.y - m.pos.y;
+                        let mods = egui_mods_to_rack(&ctx.input(|i| i.modifiers));
+
+                        if let Some(result) = self.send_module_event(
+                            m.id,
+                            cc::EVENT_BUTTON,
+                            local_x,
+                            local_y,
+                            0,
+                            1,
+                            mods,
+                            0.0,
+                            0.0,
+                        ) {
+                            if result.consumed {
+                                if let Some(port_info) = result.port_drag {
+                                    self.drag = Some(DragState::Cable {
+                                        from_module: m.id,
+                                        from_port: port_info.port_id,
+                                        is_output: port_info.is_output,
+                                        mouse_pos: pos,
+                                    });
+                                } else {
+                                    self.active_module_drag = Some(m.id);
+                                }
+                            } else {
+                                self.drag =
+                                    Some(DragState::Module { module_idx: *idx });
+                            }
                         } else {
                             self.drag = Some(DragState::Module { module_idx: *idx });
                         }
@@ -543,31 +632,33 @@ impl App {
                                 *mouse_pos = pos;
                             }
                         }
-                        Some(DragState::Knob {
-                            module_idx,
-                            param_id,
-                            start_value,
-                            start_y,
-                            min,
-                            max,
-                        }) => {
-                            if let Some(pos) = response.interact_pointer_pos() {
-                                let dy = *start_y - pos.y;
-                                let range = *max - *min;
-                                let sensitivity = range / 200.0;
-                                let new_val = (*start_value + dy * sensitivity).clamp(*min, *max);
-                                let _ = self.cmd_tx.send(Command::SetParam {
-                                    module: self.modules[*module_idx].id,
-                                    param_id: *param_id,
-                                    value: new_val,
-                                });
-                            }
-                        }
                         Some(DragState::Module { module_idx }) => {
                             self.modules[*module_idx].pos += response.drag_delta();
                         }
                         None => {
-                            self.modules[*idx].pos += response.drag_delta();
+                            if let Some(active_id) = self.active_module_drag {
+                                if let Some(pos) = response.interact_pointer_pos() {
+                                    if let Some(m) =
+                                        self.modules.iter().find(|m| m.id == active_id)
+                                    {
+                                        let local_x = pos.x - m.pos.x;
+                                        let local_y = pos.y - m.pos.y;
+                                        self.send_module_event(
+                                            active_id,
+                                            cc::EVENT_HOVER,
+                                            local_x,
+                                            local_y,
+                                            0,
+                                            0,
+                                            0,
+                                            0.0,
+                                            0.0,
+                                        );
+                                    }
+                                }
+                            } else {
+                                self.modules[*idx].pos += response.drag_delta();
+                            }
                         }
                     }
                 }
@@ -581,7 +672,28 @@ impl App {
                     }) = self.drag.take()
                     {
                         if let Some(pos) = response.interact_pointer_pos() {
-                            drag_completed = Some((from_module, from_port, is_output, pos));
+                            drag_completed =
+                                Some((from_module, from_port, is_output, pos));
+                        }
+                    } else if let Some(active_id) = self.active_module_drag.take() {
+                        if let Some(pos) = response.interact_pointer_pos() {
+                            if let Some(m) =
+                                self.modules.iter().find(|m| m.id == active_id)
+                            {
+                                let local_x = pos.x - m.pos.x;
+                                let local_y = pos.y - m.pos.y;
+                                self.send_module_event(
+                                    active_id,
+                                    cc::EVENT_BUTTON,
+                                    local_x,
+                                    local_y,
+                                    0,
+                                    0,
+                                    0,
+                                    0.0,
+                                    0.0,
+                                );
+                            }
                         }
                     } else {
                         self.drag = None;
@@ -623,6 +735,57 @@ impl App {
                                 in_module: im,
                                 in_port: ip,
                             });
+                        }
+                    }
+                }
+            }
+
+            // Forward hover events when not dragging
+            if self.drag.is_none() && self.active_module_drag.is_none() {
+                if let Some(hover_pos) = ctx.pointer_hover_pos() {
+                    for m in &self.modules {
+                        let module_rect = egui::Rect::from_min_size(m.pos, m.size);
+                        if module_rect.contains(hover_pos) {
+                            let local_x = hover_pos.x - m.pos.x;
+                            let local_y = hover_pos.y - m.pos.y;
+                            self.send_module_event(
+                                m.id,
+                                cc::EVENT_HOVER,
+                                local_x,
+                                local_y,
+                                0,
+                                0,
+                                0,
+                                0.0,
+                                0.0,
+                            );
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Forward scroll events
+            let scroll_delta = ctx.input(|i| i.smooth_scroll_delta);
+            if scroll_delta != egui::Vec2::ZERO {
+                if let Some(hover_pos) = ctx.pointer_hover_pos() {
+                    for m in &self.modules {
+                        let module_rect = egui::Rect::from_min_size(m.pos, m.size);
+                        if module_rect.contains(hover_pos) {
+                            let local_x = hover_pos.x - m.pos.x;
+                            let local_y = hover_pos.y - m.pos.y;
+                            self.send_module_event(
+                                m.id,
+                                cc::EVENT_SCROLL,
+                                local_x,
+                                local_y,
+                                0,
+                                0,
+                                0,
+                                scroll_delta.x,
+                                scroll_delta.y,
+                            );
+                            break;
                         }
                     }
                 }
