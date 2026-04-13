@@ -30,6 +30,7 @@
 #include <window/Window.hpp>
 #include <app/Scene.hpp>
 #include <widget/event.hpp>
+#include <history.hpp>
 
 #include <cstring>
 #include <unordered_map>
@@ -227,6 +228,9 @@ int cardinal_init(float sample_rate, const char* resource_dir) {
 
     // Create EventState — Widget::removeChild calls APP->event->finalizeWidget.
     g_context->event = new rack::widget::EventState();
+
+    // Create History — knob drags push undo actions to APP->history.
+    g_context->history = new rack::history::State();
 
     // Plugin registration is deferred to Rust side
 
