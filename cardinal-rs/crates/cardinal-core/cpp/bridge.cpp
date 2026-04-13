@@ -225,6 +225,19 @@ int cardinal_init(float sample_rate, const char* resource_dir) {
 
     // Plugin registration is deferred to Rust side
 
+    // Register built-in AudioIO module as a catalog entry
+    {
+        static rack::plugin::Plugin audioPlugin;
+        audioPlugin.slug = "Cardinal";
+        g_audioIOModel.slug = "AudioIO";
+        g_audioIOModel.name = "Audio I/O";
+        g_audioIOModel.plugin = &audioPlugin;
+        audioPlugin.models.push_back(&g_audioIOModel);
+        rack::plugin::plugins.push_back(&audioPlugin);
+        // Register as terminal model so engine processes it before/after others
+        hostTerminalModels.push_back(&g_audioIOModel);
+    }
+
     fprintf(stderr, "cardinal: [init] done — %d plugins, %d models\n",
             (int)rack::plugin::plugins.size(),
             cardinal_catalog_count());
@@ -558,33 +571,14 @@ void cardinal_cable_destroy(CableHandle h) {
 // ── Audio I/O ────────────────────────────────────────────────────────
 
 ModuleHandle cardinal_audio_create(void) {
-    if (!g_engine || g_audioIO) return -1;  // only one audio module
+    if (!g_engine || g_audioIO) return -1;
 
-    g_audioIOModel.slug = "AudioIO";
-    g_audioIOModel.name = "Audio I/O";
+    ModuleHandle handle = cardinal_module_create("Cardinal", "AudioIO");
+    if (handle < 0) return -1;
 
-    // Register as a terminal model so the engine processes it
-    // before/after all other modules
-    hostTerminalModels.push_back(&g_audioIOModel);
+    auto it = g_modules.find(handle);
+    g_audioIO = static_cast<AudioIOModule*>(it->second.module);
 
-    auto* module = new AudioIOModule();
-    module->model = &g_audioIOModel;
-    g_engine->addModule(module);
-    g_audioIO = module;
-
-    int64_t handle = module->id;
-
-    // Create widget for rendering
-    rack::app::ModuleWidget* widget = nullptr;
-    if (!rack::settings::headless) {
-        try {
-            widget = g_audioIOModel.createModuleWidget(module);
-        } catch (...) {
-            fprintf(stderr, "cardinal: failed to create AudioIO widget\n");
-        }
-    }
-
-    g_modules[handle] = { module, widget, &g_audioIOModel };
     return handle;
 }
 
