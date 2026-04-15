@@ -2,7 +2,6 @@
 members = [
     "cardinal-egui",
     "crates/cardinal-core",
-    "crates/cardinal-wrapper",
     "crates/plugins/*",
 ]
 resolver = "2"

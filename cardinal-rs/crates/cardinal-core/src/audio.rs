@@ -1,4 +1,4 @@
-use cardinal_core as cc;
+use crate as cc;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
 pub fn cpal_sample_rate() -> Option<f32> {

@@ -47,15 +47,13 @@ into static libraries, then drives them from Rust. The key pieces:
 ```
   cardinal-egui (winit + egui)
        |
-       +--- cardinal-wrapper (engine driver thread, audio backend)
+       +--- cardinal-core (Rack engine, NanoVG wgpu, C++ bridge, audio)
        |         |
-       |         +--- cardinal-core (Rack engine, NanoVG wgpu, C++ bridge)
-       |                   |
-       |                   +--- cardinal-plugins-registry
-       |                            |
-       |                            +--- 66 cardinal-plugin-* crates
+       |         +--- cardinal-plugins-registry
+       |                  |
+       |                  +--- 66 cardinal-plugin-* crates
        |
-       +--- egui / egui-wgpu / winit / wgpu / cpal
+       +--- egui / egui-wgpu / winit / wgpu
 ```
 
 All Cardinal/Rack state lives on a dedicated thread. The UI
@@ -73,7 +71,7 @@ cardinal-rs/
       app.rs               App state, egui layout, input forwarding, painting
       wgpu_app.rs          GpuState, WgpuApp, winit ApplicationHandler
   crates/
-    cardinal-core/         Rack engine compilation, NanoVG wgpu backend, C++ bridge
+    cardinal-core/         Rack engine, NanoVG wgpu backend, C++ bridge, audio
       cpp/
         bridge.cpp         C API: modules, events, cables, audio, incomplete cable
         bridge.h           Public C header
@@ -84,11 +82,9 @@ cardinal-rs/
         ffi.rs             Raw extern declarations and NanoVG types
         nanovg_wgpu.rs     wgpu NanoVG backend (~2000 lines)
         nanovg_wgpu_shaders.wgsl  WGSL vertex/fragment shaders
-      build.rs             Compiles Rack engine, C deps, and bridge
-    cardinal-wrapper/      Reusable engine driver (no UI dependency)
-      src/
         cardinal_thread.rs Command/EventResult types, spawn_cardinal_thread()
         audio.rs           cpal audio backend (stream setup + callback)
+      build.rs             Compiles Rack engine, C deps, and bridge
     plugins/
       cardinal-plugin-*/   66 plugin vendor crates (each compiles C++ via cc)
       cardinal-plugins-registry/  Links all plugins, calls registration functions

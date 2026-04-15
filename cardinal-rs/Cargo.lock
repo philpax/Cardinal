@@ -334,6 +334,7 @@ version = "0.1.0"
 dependencies = [
  "cardinal-plugins-registry",
  "cc",
+ "cpal",
  "pkg-config",
  "pollster",
  "wgpu",
@@ -344,7 +345,6 @@ name = "cardinal-egui"
 version = "0.1.0"
 dependencies = [
  "cardinal-core",
- "cardinal-wrapper",
  "cpal",
  "egui",
  "egui-wgpu",
@@ -886,16 +886,6 @@ dependencies = [
  "cardinal-plugin-wstd-drums",
  "cardinal-plugin-zetacarinaemodules",
  "cardinal-plugin-zzc",
-]
-
-[[package]]
-name = "cardinal-wrapper"
-version = "0.1.0"
-dependencies = [
- "cardinal-core",
- "cpal",
- "pollster",
- "wgpu",
 ]
 
 [[package]]

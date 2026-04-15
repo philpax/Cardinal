@@ -6,6 +6,8 @@
 // Ensure plugin crates are linked (they provide the compiled plugin objects)
 extern crate cardinal_plugins_registry;
 
+pub mod audio;
+pub mod cardinal_thread;
 pub mod ffi;
 pub mod nanovg_wgpu;
 

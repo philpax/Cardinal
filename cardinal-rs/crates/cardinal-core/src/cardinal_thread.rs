@@ -1,4 +1,4 @@
-use cardinal_core::{self as cc, CableId, ModuleId};
+use crate::{self as cc, CableId, ModuleId};
 use std::sync::mpsc;
 use std::sync::Arc;
 
@@ -82,7 +82,7 @@ pub fn spawn_cardinal_thread(
             cc::init(sample_rate, &resource_dir);
 
             #[allow(unused_assignments)]
-            let mut nanovg_ctx: *mut cardinal_core::ffi::NVGcontext = std::ptr::null_mut();
+            let mut nanovg_ctx: *mut crate::ffi::NVGcontext = std::ptr::null_mut();
             let mut gpu_device: Option<Arc<wgpu::Device>> = None;
             let mut _gpu_queue: Option<Arc<wgpu::Queue>> = None;
 
@@ -172,10 +172,10 @@ pub fn spawn_cardinal_thread(
                         });
                         let view = texture.create_view(&Default::default());
 
-                        cardinal_core::nanovg_wgpu::set_render_target(nanovg_ctx, view, w, h);
-                        unsafe { cardinal_core::ffi::nvgBeginFrame(nanovg_ctx, w as f32, h as f32, 1.0) };
+                        crate::nanovg_wgpu::set_render_target(nanovg_ctx, view, w, h);
+                        unsafe { crate::ffi::nvgBeginFrame(nanovg_ctx, w as f32, h as f32, 1.0) };
                         let ok = cc::module_render(module_id, nanovg_ctx, w as i32, h as i32);
-                        unsafe { cardinal_core::ffi::nvgEndFrame(nanovg_ctx) };
+                        unsafe { crate::ffi::nvgEndFrame(nanovg_ctx) };
 
                         if ok {
                             let _ = render_tx.send(RenderResult {
@@ -198,11 +198,11 @@ pub fn spawn_cardinal_thread(
                     Command::InitGpu { device, queue } => {
                         gpu_device = Some(device.clone());
                         _gpu_queue = Some(queue.clone());
-                        let flags = cardinal_core::ffi::NVG_ANTIALIAS | cardinal_core::ffi::NVG_STENCIL_STROKES;
-                        nanovg_ctx = cardinal_core::nanovg_wgpu::create_context(
+                        let flags = crate::ffi::NVG_ANTIALIAS | crate::ffi::NVG_STENCIL_STROKES;
+                        nanovg_ctx = crate::nanovg_wgpu::create_context(
                             device, queue, flags,
                         );
-                        let fb_ctx = cardinal_core::nanovg_wgpu::create_shared_context(
+                        let fb_ctx = crate::nanovg_wgpu::create_shared_context(
                             nanovg_ctx, flags,
                         );
                         cc::set_vg(nanovg_ctx, fb_ctx);
