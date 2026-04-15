@@ -1,4 +1,5 @@
 mod constants;
+mod dmatex;
 mod hand_menu;
 mod math;
 
