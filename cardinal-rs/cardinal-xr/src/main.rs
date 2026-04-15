@@ -1,7 +1,10 @@
+mod cable;
 mod constants;
 mod dmatex;
 mod hand_menu;
 mod math;
+mod module_panel;
+mod workspace;
 
 use std::sync::mpsc;
 use std::sync::Arc;
