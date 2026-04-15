@@ -1,4 +1,5 @@
 mod constants;
+mod hand_menu;
 mod math;
 
 use std::sync::mpsc;
