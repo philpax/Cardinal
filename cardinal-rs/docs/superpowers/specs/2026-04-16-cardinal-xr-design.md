@@ -8,10 +8,26 @@ A Stardust XR client for Cardinal, displaying VCV Rack modules as interactive 3D
 
 New workspace member `cardinal-xr/` depending on:
 
-- **cardinal-core** — engine, module lifecycle, NanoVG rendering, audio
+- **cardinal-core** — engine, module lifecycle, NanoVG rendering, audio (workspace dependency)
 - **stardust-xr-fusion** — Stardust client protocol, spatial primitives
 - **stardust-xr-molecules** — input handling, grabbables, buttons, touch planes
 - **stardust-xr-asteroids** — declarative UI for the hand menu
+
+Stardust dependencies use git sources with version fallback, matching the pattern used by the Stardust crates themselves:
+
+```toml
+[dependencies.stardust-xr-fusion]
+version = "0.51.0"
+git = "https://github.com/StardustXR/core.git"
+
+[dependencies.stardust-xr-molecules]
+version = "0.51.0"
+git = "https://github.com/StardustXR/molecules.git"
+
+[dependencies.stardust-xr-asteroids]
+version = "0.51.0"
+git = "https://github.com/StardustXR/asteroids.git"
+```
 
 ### Thread Architecture
 
