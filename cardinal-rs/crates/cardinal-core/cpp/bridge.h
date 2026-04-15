@@ -102,6 +102,14 @@ CableHandle cardinal_cable_create(
     ModuleHandle in_module,  int in_port);
 void cardinal_cable_destroy(CableHandle h);
 
+/// Set the incomplete cable on the stub RackWidget so that PortWidget::draw
+/// dims incompatible ports during a cable drag. Pass the source module and
+/// port; `is_output` indicates the direction of the dragged port.
+void cardinal_set_incomplete_cable(ModuleHandle h, int port_id, int is_output);
+
+/// Clear the incomplete cable (call when the cable drag ends).
+void cardinal_clear_incomplete_cable(void);
+
 // ── Audio I/O ────────────────────────────────────────────────────────
 /// Create a stereo audio I/O terminal module.
 /// This module has 2 input ports (for audio going to speakers) and

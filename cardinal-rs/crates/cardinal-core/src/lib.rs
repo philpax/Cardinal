@@ -232,6 +232,17 @@ pub fn module_check_port_drag(id: ModuleId) -> Option<PortDragInfo> {
     }
 }
 
+/// Set the incomplete cable for port highlighting during cable drags.
+/// Ports of the same direction as the source port will be dimmed.
+pub fn set_incomplete_cable(id: ModuleId, port_id: i32, is_output: bool) {
+    unsafe { ffi::cardinal_set_incomplete_cable(id.0, port_id, is_output as i32) }
+}
+
+/// Clear the incomplete cable (call when a cable drag ends).
+pub fn clear_incomplete_cable() {
+    unsafe { ffi::cardinal_clear_incomplete_cable() }
+}
+
 /// Render a module widget using the provided NanoVG context.
 /// Returns true on success.
 pub fn module_render(id: ModuleId, vg: *mut ffi::NVGcontext, width: i32, height: i32) -> bool {

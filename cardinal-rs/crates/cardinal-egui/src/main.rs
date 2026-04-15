@@ -46,6 +46,12 @@ enum Command {
         height: i32,
     },
     GetCatalog(mpsc::Sender<Vec<cc::CatalogEntry>>),
+    SetIncompleteCable {
+        module_id: ModuleId,
+        port_id: i32,
+        is_output: bool,
+    },
+    ClearIncompleteCable,
     InitGpu {
         device: Arc<wgpu::Device>,
         queue: Arc<wgpu::Queue>,
@@ -191,6 +197,12 @@ fn spawn_cardinal_thread(
                                 texture,
                             });
                         }
+                    }
+                    Command::SetIncompleteCable { module_id, port_id, is_output } => {
+                        cc::set_incomplete_cable(module_id, port_id, is_output);
+                    }
+                    Command::ClearIncompleteCable => {
+                        cc::clear_incomplete_cable();
                     }
                     Command::GetCatalog(reply) => {
                         let _ = reply.send(cc::catalog());
@@ -606,6 +618,11 @@ impl App {
                         ) {
                             if result.consumed {
                                 if let Some(port_info) = result.port_drag {
+                                    let _ = self.cmd_tx.send(Command::SetIncompleteCable {
+                                        module_id: m.id,
+                                        port_id: port_info.port_id,
+                                        is_output: port_info.is_output,
+                                    });
                                     self.drag = Some(DragState::Cable {
                                         from_module: m.id,
                                         from_port: port_info.port_id,
@@ -671,6 +688,7 @@ impl App {
                         ..
                     }) = self.drag.take()
                     {
+                        let _ = self.cmd_tx.send(Command::ClearIncompleteCable);
                         if let Some(pos) = response.interact_pointer_pos() {
                             drag_completed =
                                 Some((from_module, from_port, is_output, pos));

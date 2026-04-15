@@ -10,6 +10,9 @@ pkgs.mkShell {
     gcc
     pkg-config
     cmake
+
+    # Debugging
+    gdb
   ];
 
   buildInputs = with pkgs; [

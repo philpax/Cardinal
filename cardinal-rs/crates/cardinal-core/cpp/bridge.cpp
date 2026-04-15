@@ -758,6 +758,25 @@ void cardinal_cable_destroy(CableHandle h) {
     g_cables.erase(it);
 }
 
+// ── Incomplete cable (port highlighting) ─────────────────────────────
+
+void cardinal_set_incomplete_cable(ModuleHandle h, int port_id, int is_output) {
+    auto it = g_modules.find(h);
+    if (it == g_modules.end() || !it->second.widget) return;
+
+    auto* cw = new rack::app::CableWidget;
+    if (is_output) {
+        cw->outputPort = it->second.widget->getOutput(port_id);
+    } else {
+        cw->inputPort = it->second.widget->getInput(port_id);
+    }
+    APP->scene->rack->setIncompleteCable(cw);
+}
+
+void cardinal_clear_incomplete_cable(void) {
+    APP->scene->rack->setIncompleteCable(NULL);
+}
+
 // ── Audio I/O ────────────────────────────────────────────────────────
 
 ModuleHandle cardinal_audio_create(void) {

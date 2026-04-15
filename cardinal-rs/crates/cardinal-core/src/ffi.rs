@@ -207,6 +207,9 @@ unsafe extern "C" {
 
     pub fn cardinal_set_vg(vg: *mut NVGcontext, fb_vg: *mut NVGcontext);
 
+    pub fn cardinal_set_incomplete_cable(h: i64, port_id: c_int, is_output: c_int);
+    pub fn cardinal_clear_incomplete_cable();
+
     pub fn cardinal_audio_create() -> i64;
     pub fn cardinal_audio_process(frames: i32, input_buf: *const f32, output_buf: *mut f32);
 
