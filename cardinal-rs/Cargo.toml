@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "cardinal-egui",
+    "cardinal-xr",
     "crates/cardinal-core",
     "crates/plugins/*",
 ]
