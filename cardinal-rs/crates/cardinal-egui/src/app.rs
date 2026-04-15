@@ -1,7 +1,7 @@
 use cardinal_core::{self as cc, CableId, ModuleId};
 use std::sync::mpsc;
 
-use crate::cardinal_thread::{Command, EventResult, RenderResult};
+use cardinal_wrapper::cardinal_thread::{Command, EventResult, RenderResult};
 
 pub struct PlacedModule {
     pub id: ModuleId,

@@ -6,6 +6,7 @@ build = "build.rs"
 
 [dependencies]
 cardinal-core = { path = "../cardinal-core" }
+cardinal-wrapper = { path = "../cardinal-wrapper" }
 egui = "0.34"
 egui-winit = "0.34"
 egui-wgpu = "0.34"

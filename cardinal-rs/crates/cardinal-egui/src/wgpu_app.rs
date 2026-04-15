@@ -7,7 +7,7 @@ use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId, WindowAttributes};
 
 use crate::app::App;
-use crate::cardinal_thread::{Command, RenderResult};
+use cardinal_wrapper::cardinal_thread::{Command, RenderResult};
 
 struct GpuState {
     window: Arc<Window>,

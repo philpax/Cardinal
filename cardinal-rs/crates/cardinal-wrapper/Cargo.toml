@@ -1,0 +1,10 @@
+[package]
+name = "cardinal-wrapper"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cardinal-core = { path = "../cardinal-core" }
+wgpu = "29"
+cpal = "0.15"
+pollster = "0.4"
