@@ -1,0 +1,16 @@
+[package]
+name = "cardinal-egui"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+
+[dependencies]
+cardinal-core = { path = "../crates/cardinal-core" }
+cardinal-wrapper = { path = "../crates/cardinal-wrapper" }
+egui = "0.34"
+egui-winit = "0.34"
+egui-wgpu = "0.34"
+winit = "0.30"
+wgpu = "29"
+cpal = "0.15"
+pollster = "0.4"
