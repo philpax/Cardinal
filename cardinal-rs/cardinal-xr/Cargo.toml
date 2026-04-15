@@ -9,6 +9,8 @@ glam = { version = "0.30.0", features = ["mint"] }
 mint = "0.5.9"
 tokio = { version = "1.45.0", features = ["macros", "time", "sync"] }
 rustc-hash = "2.0.0"
+wgpu = "29"
+pollster = "0.4"
 
 [dependencies.stardust-xr-fusion]
 version = "0.51.0"
