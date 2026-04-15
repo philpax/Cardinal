@@ -1,5 +1,6 @@
 // cardinal-xr/src/main.rs
 mod constants;
+mod math;
 
 fn main() {
     eprintln!("cardinal-xr: starting");
