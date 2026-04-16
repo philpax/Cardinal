@@ -36,6 +36,7 @@ typedef struct {
     const char* plugin_slug;
     const char* model_slug;
     const char* model_name;
+    const char* tags;           // comma-separated tag names (e.g. "Oscillator,Polyphonic")
 } ModuleCatalogEntry;
 
 // ── Lifecycle ────────────────────────────────────────────────────────

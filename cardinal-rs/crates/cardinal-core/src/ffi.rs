@@ -159,6 +159,7 @@ pub struct ModuleCatalogEntry {
     pub plugin_slug: *const c_char,
     pub model_slug: *const c_char,
     pub model_name: *const c_char,
+    pub tags: *const c_char,
 }
 
 impl Default for ModuleCatalogEntry {
@@ -167,6 +168,7 @@ impl Default for ModuleCatalogEntry {
             plugin_slug: std::ptr::null(),
             model_slug: std::ptr::null(),
             model_name: std::ptr::null(),
+            tags: std::ptr::null(),
         }
     }
 }

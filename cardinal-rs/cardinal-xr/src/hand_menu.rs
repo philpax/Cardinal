@@ -68,7 +68,7 @@ impl HandMenuState {
                         model_slug: e.model_slug.clone(),
                         display_name: e.model_name.clone(),
                         plugin_slug: e.plugin_slug.clone(),
-                        tags: vec![],
+                        tags: e.tags.clone(),
                     })
                     .collect();
                 modules.sort_by(|a, b| a.display_name.cmp(&b.display_name));
@@ -80,12 +80,23 @@ impl HandMenuState {
             })
             .collect();
 
+        // Collect unique tags, sorted alphabetically.
+        let mut tag_set = std::collections::BTreeSet::new();
+        for pg in &all_plugins {
+            for m in &pg.modules {
+                for t in &m.tags {
+                    tag_set.insert(t.clone());
+                }
+            }
+        }
+        let tags: Vec<String> = tag_set.into_iter().collect();
+
         // filtered_plugins starts as a clone of all_plugins.
         let filtered_plugins = clone_plugins(&all_plugins);
 
         Self {
             all_plugins,
-            tags: vec![],
+            tags,
             selected_tag: None,
             filtered_plugins,
             selected_plugin: None,
@@ -162,8 +173,48 @@ impl HandMenuState {
     // ── Private helpers ────────────────────────────────────────────────
 
     fn refilter_plugins(&mut self) {
-        // Tags are not yet implemented; filtered_plugins mirrors all_plugins.
-        self.filtered_plugins = clone_plugins(&self.all_plugins);
+        let selected_tag = self
+            .selected_tag
+            .and_then(|idx| self.tags.get(idx))
+            .cloned();
+
+        match selected_tag {
+            None => {
+                // No tag filter — show all plugins.
+                self.filtered_plugins = clone_plugins(&self.all_plugins);
+            }
+            Some(ref tag) => {
+                // Filter: only include plugins that have at least one module
+                // with the selected tag, and within each plugin only include
+                // matching modules.
+                self.filtered_plugins = self
+                    .all_plugins
+                    .iter()
+                    .filter_map(|pg| {
+                        let matching: Vec<ModuleEntry> = pg
+                            .modules
+                            .iter()
+                            .filter(|m| m.tags.contains(tag))
+                            .map(|m| ModuleEntry {
+                                model_slug: m.model_slug.clone(),
+                                display_name: m.display_name.clone(),
+                                plugin_slug: m.plugin_slug.clone(),
+                                tags: m.tags.clone(),
+                            })
+                            .collect();
+                        if matching.is_empty() {
+                            None
+                        } else {
+                            Some(PluginGroup {
+                                plugin_slug: pg.plugin_slug.clone(),
+                                display_name: pg.display_name.clone(),
+                                modules: matching,
+                            })
+                        }
+                    })
+                    .collect();
+            }
+        }
     }
 }
 
@@ -326,16 +377,19 @@ mod tests {
                 plugin_slug: "Fundamental".into(),
                 model_slug: "VCO".into(),
                 model_name: "VCO".into(),
+                tags: vec!["Oscillator".into(), "Polyphonic".into()],
             },
             CatalogEntry {
                 plugin_slug: "Fundamental".into(),
                 model_slug: "VCF".into(),
                 model_name: "VCF".into(),
+                tags: vec!["Filter".into(), "Polyphonic".into()],
             },
             CatalogEntry {
                 plugin_slug: "Befaco".into(),
                 model_slug: "Mixer".into(),
                 model_name: "Mixer".into(),
+                tags: vec!["Mixer".into()],
             },
         ]
     }
@@ -354,6 +408,12 @@ mod tests {
         assert_eq!(state.all_plugins[1].modules.len(), 2, "Fundamental has 2 modules");
         assert_eq!(state.filtered_plugins.len(), 2);
         assert!(!state.visible);
+
+        // Tags should be collected and sorted
+        assert_eq!(state.tags, vec!["Filter", "Mixer", "Oscillator", "Polyphonic"]);
+
+        // Module tags should be populated
+        assert_eq!(state.all_plugins[0].modules[0].tags, vec!["Mixer"]);
     }
 
     #[test]
@@ -415,6 +475,41 @@ mod tests {
         state.reset_hover(level, 0);
         let result = state.update_hover(level, 0, 0.1);
         assert!(!result, "should not trigger after reset with small dt");
+    }
+
+    #[test]
+    fn test_tag_filtering() {
+        let catalog = sample_catalog();
+        let mut state = HandMenuState::from_catalog(&catalog);
+
+        // "Oscillator" is at index 2 (alphabetical: Filter, Mixer, Oscillator, Polyphonic)
+        let osc_idx = state.tags.iter().position(|t| t == "Oscillator").unwrap();
+        state.select_tag(Some(osc_idx));
+
+        // Only Fundamental has an Oscillator module (VCO)
+        assert_eq!(state.filtered_plugins.len(), 1);
+        assert_eq!(state.filtered_plugins[0].plugin_slug, "Fundamental");
+        assert_eq!(state.filtered_plugins[0].modules.len(), 1);
+        assert_eq!(state.filtered_plugins[0].modules[0].model_slug, "VCO");
+
+        // "Polyphonic" should match both VCO and VCF in Fundamental
+        let poly_idx = state.tags.iter().position(|t| t == "Polyphonic").unwrap();
+        state.select_tag(Some(poly_idx));
+
+        assert_eq!(state.filtered_plugins.len(), 1);
+        assert_eq!(state.filtered_plugins[0].plugin_slug, "Fundamental");
+        assert_eq!(state.filtered_plugins[0].modules.len(), 2);
+
+        // "Mixer" should only match Befaco
+        let mixer_idx = state.tags.iter().position(|t| t == "Mixer").unwrap();
+        state.select_tag(Some(mixer_idx));
+
+        assert_eq!(state.filtered_plugins.len(), 1);
+        assert_eq!(state.filtered_plugins[0].plugin_slug, "Befaco");
+
+        // Clearing tag filter should show all plugins again
+        state.select_tag(None);
+        assert_eq!(state.filtered_plugins.len(), 2);
     }
 
     #[test]

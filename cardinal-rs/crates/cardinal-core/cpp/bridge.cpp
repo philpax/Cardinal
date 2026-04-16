@@ -32,7 +32,10 @@
 #include <widget/event.hpp>
 #include <history.hpp>
 
+#include <tag.hpp>
+
 #include <cstring>
+#include <string>
 #include <unordered_map>
 
 // Forward declarations
@@ -303,7 +306,13 @@ int cardinal_catalog_count(void) {
     return count;
 }
 
+// Static storage for tag strings — kept alive between catalog_list calls.
+static std::vector<std::string> g_catalogTagStrings;
+
 int cardinal_catalog_list(ModuleCatalogEntry* out, int max_entries) {
+    g_catalogTagStrings.clear();
+    g_catalogTagStrings.reserve(max_entries);
+
     int i = 0;
     for (auto* plugin : rack::plugin::plugins) {
         for (auto* model : plugin->models) {
@@ -311,6 +320,17 @@ int cardinal_catalog_list(ModuleCatalogEntry* out, int max_entries) {
             out[i].plugin_slug = plugin->slug.c_str();
             out[i].model_slug = model->slug.c_str();
             out[i].model_name = model->name.c_str();
+
+            // Build comma-separated tag string
+            std::string tagStr;
+            for (auto it = model->tagIds.begin(); it != model->tagIds.end(); ++it) {
+                if (it != model->tagIds.begin())
+                    tagStr += ',';
+                tagStr += rack::tag::getTag(*it);
+            }
+            g_catalogTagStrings.push_back(std::move(tagStr));
+            out[i].tags = g_catalogTagStrings.back().c_str();
+
             i++;
         }
     }

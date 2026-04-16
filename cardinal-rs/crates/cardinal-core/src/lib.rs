@@ -54,6 +54,7 @@ pub struct CatalogEntry {
     pub plugin_slug: String,
     pub model_slug: String,
     pub model_name: String,
+    pub tags: Vec<String>,
 }
 
 /// List all available module types.
@@ -63,10 +64,19 @@ pub fn catalog() -> Vec<CatalogEntry> {
     let written = unsafe { ffi::cardinal_catalog_list(raw.as_mut_ptr(), count as _) } as usize;
     raw.truncate(written);
     raw.into_iter()
-        .map(|e| CatalogEntry {
-            plugin_slug: unsafe { c_str_to_string(e.plugin_slug) },
-            model_slug: unsafe { c_str_to_string(e.model_slug) },
-            model_name: unsafe { c_str_to_string(e.model_name) },
+        .map(|e| {
+            let tags_str = unsafe { c_str_to_string(e.tags) };
+            let tags = if tags_str.is_empty() {
+                vec![]
+            } else {
+                tags_str.split(',').map(|s| s.trim().to_string()).collect()
+            };
+            CatalogEntry {
+                plugin_slug: unsafe { c_str_to_string(e.plugin_slug) },
+                model_slug: unsafe { c_str_to_string(e.model_slug) },
+                model_name: unsafe { c_str_to_string(e.model_name) },
+                tags,
+            }
         })
         .collect()
 }
