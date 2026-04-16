@@ -3,13 +3,14 @@ use cardinal_core::cardinal_thread::{Command, RenderResult};
 use cardinal_core::{ModuleId, CableId, CatalogEntry};
 use rustc_hash::FxHashMap;
 use crate::module_panel::ModulePanel;
-use crate::cable::Cable;
+use crate::cable::{Cable, CableDragState};
 
 pub struct Workspace {
     pub modules: FxHashMap<ModuleId, ModulePanel>,
     pub cables: FxHashMap<CableId, Cable>,
     pub catalog: Vec<CatalogEntry>,
     pub cmd_tx: mpsc::Sender<Command>,
+    pub cable_drag: CableDragState,
     render_rx: mpsc::Receiver<RenderResult>,
     next_cable_color_idx: usize,
 }
@@ -25,6 +26,7 @@ impl Workspace {
             cables: FxHashMap::default(),
             catalog,
             cmd_tx,
+            cable_drag: CableDragState::Idle,
             render_rx,
             next_cable_color_idx: 0,
         }
