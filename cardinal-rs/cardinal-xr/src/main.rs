@@ -38,6 +38,9 @@ async fn main() {
     }))
     .expect("cardinal-xr: failed to find a Vulkan adapter");
 
+    let adapter_info = adapter.get_info();
+    eprintln!("cardinal-xr: GPU adapter: {} ({:?}, {:?})", adapter_info.name, adapter_info.backend, adapter_info.device_type);
+
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: Some("cardinal_xr_device"),
         required_features: wgpu::Features::empty(),

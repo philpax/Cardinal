@@ -280,10 +280,38 @@ pub fn create_exportable_texture_pair(
     }
 }
 
-/// Open a DRM render node wrapped for the timeline_syncobj crate.
-pub fn open_drm_render_node() -> Option<timeline_syncobj::render_node::DrmRenderNode> {
+/// Open the DRM render node that matches the wgpu device's physical device.
+pub fn open_matching_drm_render_node(device: &wgpu::Device) -> Option<timeline_syncobj::render_node::DrmRenderNode> {
+    // Query the physical device's DRM properties to find the right render node
+    let render_minor = unsafe {
+        let hal_guard = device.as_hal::<wgpu::hal::vulkan::Api>()?;
+        let instance = hal_guard.shared_instance().raw_instance();
+        let physical_device = hal_guard.raw_physical_device();
+
+        let mut drm_props = vk::PhysicalDeviceDrmPropertiesEXT::default();
+        let mut props2 = vk::PhysicalDeviceProperties2::default().push_next(&mut drm_props);
+        instance.get_physical_device_properties2(physical_device, &mut props2);
+
+        if drm_props.has_render != 0 {
+            Some(drm_props.render_minor as u64)
+        } else {
+            None
+        }
+    };
+
+    if let Some(minor) = render_minor {
+        eprintln!("cardinal-xr/dmatex: wgpu device uses DRM render node minor {minor}");
+        match timeline_syncobj::render_node::DrmRenderNode::new(minor) {
+            Ok(node) => return Some(node),
+            Err(e) => eprintln!("cardinal-xr/dmatex: failed to open renderD{minor}: {e}"),
+        }
+    }
+
+    // Fallback: try all render nodes
+    eprintln!("cardinal-xr/dmatex: falling back to scanning render nodes");
     for i in 128..144 {
         if let Ok(node) = timeline_syncobj::render_node::DrmRenderNode::new(i) {
+            eprintln!("cardinal-xr/dmatex: opened renderD{i}");
             return Some(node);
         }
     }

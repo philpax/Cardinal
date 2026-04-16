@@ -42,7 +42,7 @@ impl Workspace {
     ) -> Self {
         let root_spatial = Spatial::create(parent, Transform::identity())
             .expect("cardinal-xr: failed to create workspace root spatial");
-        let render_node = dmatex::open_drm_render_node();
+        let render_node = dmatex::open_matching_drm_render_node(&device);
         if render_node.is_none() {
             eprintln!("cardinal-xr: WARNING: no DRM render node found, DMA-BUF textures unavailable");
         }
