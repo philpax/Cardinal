@@ -225,6 +225,8 @@ pub struct ModulePanel {
     body_grab: BodyGrab,
     /// Resize handles at each corner.
     resize_handles: [ResizeHandle; 4],
+    /// Per-widget interaction boxes (ports + params).
+    pub interaction_boxes: Vec<crate::interaction::InteractionBox>,
     /// Delete button at the top-right corner.
     delete_button: Button,
     /// Set to true when the delete button is pressed; workspace should check and remove.
@@ -332,6 +334,16 @@ impl ModulePanel {
         });
 
 
+        // --- Interaction boxes (per-widget) ---
+        let interaction_boxes = crate::interaction::create_interaction_boxes(
+            &spatial, &inputs, &outputs, &params,
+            size_px.0, size_px.1, scale,
+        );
+        eprintln!(
+            "cardinal-xr: created {} interaction boxes for {:?}",
+            interaction_boxes.len(), id
+        );
+
         // --- Delete button at top-right corner ---
         let delete_button_x = hw + DELETE_BUTTON_OFFSET_M;
         let delete_button_y = hh + DELETE_BUTTON_OFFSET_M;
@@ -366,6 +378,7 @@ impl ModulePanel {
             _outline,
             body_grab,
             resize_handles,
+            interaction_boxes,
             delete_button,
             pending_delete: false,
             texture_applied: false,
@@ -425,7 +438,7 @@ impl ModulePanel {
     }
 
     /// Called each frame to process grab, resize, and delete interactions.
-    pub fn frame_update(&mut self, dt: f32) {
+    pub fn frame_update(&mut self, dt: f32, cmd_tx: &std::sync::mpsc::Sender<cardinal_core::cardinal_thread::Command>) {
         // --- Body grab (moving) ---
         self.body_grab.handle_events();
 
@@ -541,6 +554,11 @@ impl ModulePanel {
                 );
             }
         }
+
+        // --- Interaction boxes ---
+        crate::interaction::process_interactions(
+            &mut self.interaction_boxes, cmd_tx, self.id,
+        );
 
         // --- Delete button ---
         self.delete_button.handle_events();

@@ -261,9 +261,9 @@ impl Workspace {
             });
         }
 
-        // Update all module panels (grab, resize, delete interactions).
+        // Update all module panels (grab, resize, delete, widget interactions).
         for panel in self.modules.values_mut() {
-            panel.frame_update(dt);
+            panel.frame_update(dt, &self.cmd_tx);
         }
 
         // Collect modules flagged for deletion.
