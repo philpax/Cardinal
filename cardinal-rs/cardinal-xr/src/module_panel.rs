@@ -20,8 +20,10 @@ use crate::constants::{
 /// Path to the panel glTF asset, resolved at compile time relative to the crate root.
 fn panel_resource() -> ResourceID {
     let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/panel.glb");
+    let path = path.canonicalize()
+        .unwrap_or_else(|e| panic!("cardinal-xr: panel.glb not found at {}: {e}", path.display()));
     ResourceID::new_direct(&path)
-        .unwrap_or_else(|e| panic!("cardinal-xr: panel.glb not found at {}: {e}", path.display()))
+        .unwrap_or_else(|e| panic!("cardinal-xr: failed to create ResourceID for {}: {e}", path.display()))
 }
 
 /// A small grabbable sphere at a corner of the panel, used for resizing.
@@ -214,6 +216,8 @@ pub struct ModulePanel {
     pub spatial: Spatial,
     /// The 3D model representing the panel surface.
     pub model: Model,
+    /// Debug outline showing panel bounds.
+    _outline: Lines,
 
     /// Grabbable body for moving the panel in 3D space.
     body_grab: BodyGrab,
@@ -232,13 +236,14 @@ impl ModulePanel {
         size_px: (f32, f32),
         inputs: Vec<PortInfo>,
         outputs: Vec<PortInfo>,
+        params: Vec<ParamInfo>,
         position: glam::Vec3,
         rotation: glam::Quat,
+        scale: f32,
     ) -> Self {
-        let params = cardinal_core::module_params(id);
 
-        let width_m = size_px.0 / PIXELS_PER_METER;
-        let height_m = size_px.1 / PIXELS_PER_METER;
+        let width_m = size_px.0 / PIXELS_PER_METER * scale;
+        let height_m = size_px.1 / PIXELS_PER_METER * scale;
 
         // Create a root spatial at the requested position/rotation, parented to the workspace root.
         let spatial = Spatial::create(
@@ -250,22 +255,45 @@ impl ModulePanel {
         )
         .expect("cardinal-xr: failed to create panel spatial");
 
-        // Load the panel model as a child of the root spatial, scaled to the module's
-        // world-space dimensions. The model is already PANEL_DEPTH_M deep, so depth stays 1.0.
+        // Load the panel model as a child of the root spatial.
+        // The flatland panel.glb is a unit cube (1×1×1 after its internal 0.5 scale).
+        // Scale X=width, Y=height, Z=depth to get a thin slab.
         let model = Model::create(
             &spatial,
             Transform::from_scale(mint::Vector3 {
                 x: width_m,
                 y: height_m,
-                z: 1.0,
+                z: PANEL_DEPTH_M,
             }),
             &panel_resource(),
         )
         .expect("cardinal-xr: failed to create panel model");
 
+        // Debug outline: bright green rectangle showing panel bounds
+        let hw = width_m / 2.0;
+        let hh = height_m / 2.0;
+        let outline_color = rgba_linear!(0.0, 1.0, 0.0, 1.0);
+        let outline_thickness = 0.002;
+        let outline_points: Vec<stardust_xr_fusion::drawable::LinePoint> = [
+            [-hw, -hh, 0.0],
+            [ hw, -hh, 0.0],
+            [ hw,  hh, 0.0],
+            [-hw,  hh, 0.0],
+            [-hw, -hh, 0.0],
+        ].iter().map(|p| stardust_xr_fusion::drawable::LinePoint {
+            point: mint::Vector3 { x: p[0], y: p[1], z: p[2] },
+            thickness: outline_thickness,
+            color: outline_color,
+        }).collect();
+        let outline_line = stardust_xr_fusion::drawable::Line { points: outline_points, cyclic: false };
+        let _outline = Lines::create(&spatial, Transform::identity(), &[outline_line])
+            .expect("cardinal-xr: failed to create panel outline");
+
+
         // --- Body grab ---
         let body_grab = BodyGrab::create(&spatial, width_m, height_m)
             .expect("cardinal-xr: failed to create body grab");
+
 
         // --- Resize handles at four corners ---
         let hw = width_m / 2.0;
@@ -280,6 +308,7 @@ impl ModulePanel {
             ResizeHandle::create(&spatial, corner_offsets[i], i)
                 .expect("cardinal-xr: failed to create resize handle")
         });
+
 
         // --- Delete button at top-right corner ---
         let delete_button_x = hw + DELETE_BUTTON_OFFSET_M;
@@ -312,6 +341,7 @@ impl ModulePanel {
             rotation,
             spatial,
             model,
+            _outline,
             body_grab,
             resize_handles,
             delete_button,

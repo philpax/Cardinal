@@ -45,6 +45,7 @@ impl Workspace {
         model: String,
         position: glam::Vec3,
         rotation: glam::Quat,
+        scale: f32,
     ) -> Option<ModuleId> {
         let (reply_tx, reply_rx) = mpsc::channel();
         self.cmd_tx
@@ -60,6 +61,7 @@ impl Workspace {
         let size = info.size;
         let inputs = info.inputs;
         let outputs = info.outputs;
+        let params = info.params;
 
         // Request initial render
         self.cmd_tx
@@ -70,7 +72,9 @@ impl Workspace {
             })
             .ok()?;
 
-        let panel = ModulePanel::new(&self.root_spatial, id, size, inputs, outputs, position, rotation);
+        eprintln!("cardinal-xr: creating panel scene graph for {id:?} ({} inputs, {} outputs, {} params)", inputs.len(), outputs.len(), params.len());
+        let panel = ModulePanel::new(&self.root_spatial, id, size, inputs, outputs, params, position, rotation, scale);
+        eprintln!("cardinal-xr: panel scene graph created for {id:?}");
         self.modules.insert(id, panel);
 
         eprintln!("cardinal-xr: spawned module {plugin}/{model} -> {id:?} at {position:?}");

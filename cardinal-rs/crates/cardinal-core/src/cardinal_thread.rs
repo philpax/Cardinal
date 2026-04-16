@@ -58,6 +58,7 @@ pub struct ModuleInfo {
     pub size: (f32, f32),
     pub inputs: Vec<cc::PortInfo>,
     pub outputs: Vec<cc::PortInfo>,
+    pub params: Vec<cc::ParamInfo>,
 }
 
 pub struct RenderResult {
@@ -102,6 +103,7 @@ pub fn spawn_cardinal_thread(
                                 size: (w.max(90.0), h.max(200.0)),
                                 inputs: cc::module_inputs(id),
                                 outputs: cc::module_outputs(id),
+                                params: cc::module_params(id),
                             }
                         });
                         let _ = reply.send(info);

@@ -15,7 +15,8 @@ use stardust_xr_fusion::root::RootAspect as _;
 use crate::hand_menu::HandMenuState;
 use crate::workspace::Workspace;
 
-fn main() {
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
     eprintln!("cardinal-xr: starting");
 
     let sample_rate = cardinal_core::audio::cpal_sample_rate().unwrap_or(48000.0);
@@ -68,55 +69,68 @@ fn main() {
     let mut hand_menu = HandMenuState::from_catalog(&catalog);
 
     // --- Stardust XR connection and event loop ---
-    let rt = tokio::runtime::Runtime::new().expect("cardinal-xr: failed to create tokio runtime");
-    rt.block_on(async {
-        let mut client = stardust_xr_fusion::client::Client::connect()
-            .await
-            .expect("cardinal-xr: failed to connect to Stardust XR server");
+    let mut client = stardust_xr_fusion::client::Client::connect()
+        .await
+        .expect("cardinal-xr: failed to connect to Stardust XR server");
 
-        eprintln!("cardinal-xr: connected to Stardust XR server");
+    eprintln!("cardinal-xr: connected to Stardust XR server");
 
-        // Create workspace parented to the Stardust client root.
-        let mut workspace = Workspace::new(
-            client.get_root(),
-            catalog,
-            cmd_tx,
-            render_rx,
-        );
+    // Create workspace parented to the Stardust client root.
+    let mut workspace = Workspace::new(
+        client.get_root(),
+        catalog,
+        cmd_tx,
+        render_rx,
+    );
 
-        client
-            .sync_event_loop(|client, _flow| {
-                while let Some(root_event) = client.get_root().recv_root_event() {
-                    match root_event {
-                        stardust_xr_fusion::root::RootEvent::Ping { response } => {
-                            response.send_ok(());
+    let mut debug_spawned = false;
+
+    client
+        .sync_event_loop(|client, _flow| {
+            while let Some(root_event) = client.get_root().recv_root_event() {
+                match root_event {
+                    stardust_xr_fusion::root::RootEvent::Ping { response } => {
+                        response.send_ok(());
+                    }
+                    stardust_xr_fusion::root::RootEvent::Frame { info } => {
+                        // Debug: spawn a test module on first frame
+                        if !debug_spawned {
+                            debug_spawned = true;
+                            eprintln!("cardinal-xr: spawning debug VCO module");
+                            workspace.spawn_module(
+                                "Fundamental".to_string(),
+                                "VCO".to_string(),
+                                glam::Vec3::new(0.0, 0.0, -0.6),
+                                glam::Quat::IDENTITY,
+                                3.0,
+                            );
+                            eprintln!("cardinal-xr: debug VCO spawned");
                         }
-                        stardust_xr_fusion::root::RootEvent::Frame { info } => {
-                            workspace.frame_update(info.delta);
 
-                            // Drain spawn requests from hand menu and spawn modules.
-                            for (plugin_slug, model_slug) in hand_menu.spawn_requests.drain(..) {
-                                // TODO: use right hand's pointing ray for spawn position
-                                let spawn_pos = glam::Vec3::new(0.0, 0.0, -crate::constants::MODULE_SPAWN_DISTANCE_M);
-                                workspace.spawn_module(
-                                    plugin_slug,
-                                    model_slug,
-                                    spawn_pos,
-                                    glam::Quat::IDENTITY,
-                                );
-                            }
+                        workspace.frame_update(info.delta);
 
-                            // TODO: detect palm-up gesture and call
-                            //       hand_menu.update_palm_visibility(palm_up_amount)
-                            // TODO: update projectors with latest render textures
+                        // Drain spawn requests from hand menu.
+                        for (plugin_slug, model_slug) in hand_menu.spawn_requests.drain(..) {
+                            // TODO: use right hand's pointing ray for spawn position
+                            let spawn_pos = glam::Vec3::new(0.0, 0.0, -crate::constants::MODULE_SPAWN_DISTANCE_M);
+                            workspace.spawn_module(
+                                plugin_slug,
+                                model_slug,
+                                spawn_pos,
+                                glam::Quat::IDENTITY,
+                                1.0,
+                            );
                         }
-                        stardust_xr_fusion::root::RootEvent::SaveState { response } => {
-                            response.send_ok(stardust_xr_fusion::root::ClientState::default());
-                        }
+
+                        // TODO: detect palm-up gesture and call
+                        //       hand_menu.update_palm_visibility(palm_up_amount)
+                    }
+                    stardust_xr_fusion::root::RootEvent::SaveState { response } => {
+                        response.send_ok(stardust_xr_fusion::root::ClientState::default());
                     }
                 }
-            })
-            .await
-            .expect("cardinal-xr: event loop error");
-    });
+            }
+        })
+        .await
+        .expect("cardinal-xr: event loop error");
 }
