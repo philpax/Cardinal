@@ -4,6 +4,11 @@
 use cardinal_core::CatalogEntry;
 use glam::Vec3;
 use rustc_hash::FxHashMap;
+use stardust_xr_asteroids::{
+    Context, CustomElement, DynamicElement, Element, Reify, Tasker, Transformable,
+    elements::{Button, Spatial, Text},
+};
+use stardust_xr_fusion::drawable::{TextBounds, TextFit, XAlign, YAlign};
 
 use crate::constants::*;
 
@@ -159,6 +164,130 @@ impl HandMenuState {
     fn refilter_plugins(&mut self) {
         // Tags are not yet implemented; filtered_plugins mirrors all_plugins.
         self.filtered_plugins = clone_plugins(&self.all_plugins);
+    }
+}
+
+/// Vertical spacing between menu items (item height + small gap).
+const MENU_ITEM_SPACING_M: f32 = MENU_ITEM_HEIGHT_M + 0.002;
+
+/// Character height for menu text labels.
+const MENU_TEXT_HEIGHT_M: f32 = MENU_ITEM_HEIGHT_M * 0.5;
+
+/// Horizontal stride for each column (width + gap).
+const MENU_COLUMN_STRIDE_M: f32 = MENU_ITEM_WIDTH_M + MENU_COLUMN_GAP_M;
+
+/// Helper to build a menu entry: a Button with a Text label child.
+/// Returns a type-erased `DynamicElement` so all entries share one concrete type.
+fn menu_entry(
+    label: &str,
+    pos: [f32; 3],
+    on_press: impl Fn(&mut HandMenuState) + Send + Sync + 'static,
+) -> DynamicElement<HandMenuState> {
+    Button::new(on_press)
+        .size([MENU_ITEM_WIDTH_M, MENU_ITEM_HEIGHT_M])
+        .pos(pos)
+        .build()
+        .child(
+            Text::new(label)
+                .character_height(MENU_TEXT_HEIGHT_M)
+                .bounds(TextBounds {
+                    bounds: [MENU_ITEM_WIDTH_M, MENU_ITEM_HEIGHT_M].into(),
+                    fit: TextFit::Squeeze,
+                    anchor_align_x: XAlign::Left,
+                    anchor_align_y: YAlign::Center,
+                })
+                .pos([0.0, 0.0, 0.001])
+                .build(),
+        )
+        .dynamic()
+}
+
+impl Reify for HandMenuState {
+    fn reify(&self, _context: &Context, _tasks: impl Tasker<Self>) -> impl Element<Self> {
+        let mut entries: Vec<(String, _)> = Vec::new();
+
+        if self.visible {
+            // ── Column 0: plugins (or tags when available) ───────────
+            let scroll_offset = self
+                .scroll_offsets
+                .get(&MenuLevel::Plugin)
+                .copied()
+                .unwrap_or(0);
+
+            for (abs_idx, pg) in self
+                .filtered_plugins
+                .iter()
+                .enumerate()
+                .skip(scroll_offset)
+                .take(MENU_MAX_VISIBLE_ITEMS)
+            {
+                let is_selected = self.selected_plugin == Some(abs_idx);
+                let y_pos = -((abs_idx - scroll_offset) as f32) * MENU_ITEM_SPACING_M;
+                let idx = abs_idx;
+
+                let entry = menu_entry(
+                    &pg.display_name,
+                    [0.0, y_pos, if is_selected { 0.002 } else { 0.0 }],
+                    move |state: &mut HandMenuState| {
+                        state.select_plugin(Some(idx));
+                    },
+                );
+
+                entries.push((pg.plugin_slug.clone(), entry));
+            }
+
+            // ── Column 1: modules of selected plugin ─────────────────
+            if self.selected_plugin.is_some() {
+                let module_scroll = self
+                    .scroll_offsets
+                    .get(&MenuLevel::Module)
+                    .copied()
+                    .unwrap_or(0);
+
+                let selected_visual_idx = self
+                    .selected_plugin
+                    .map(|idx| idx.saturating_sub(scroll_offset))
+                    .unwrap_or(0);
+                let column_y_base = -(selected_visual_idx as f32) * MENU_ITEM_SPACING_M;
+
+                for (abs_idx, me) in self
+                    .filtered_modules
+                    .iter()
+                    .enumerate()
+                    .skip(module_scroll)
+                    .take(MENU_MAX_VISIBLE_ITEMS)
+                {
+                    let y_pos = column_y_base
+                        - ((abs_idx - module_scroll) as f32) * MENU_ITEM_SPACING_M;
+                    let plugin_slug = me.plugin_slug.clone();
+                    let model_slug = me.model_slug.clone();
+                    let display = me.display_name.clone();
+
+                    let entry = menu_entry(
+                        &me.display_name,
+                        [MENU_COLUMN_STRIDE_M, y_pos, 0.0],
+                        move |_state: &mut HandMenuState| {
+                            eprintln!(
+                                "hand_menu: spawn module {}/{} ({})",
+                                plugin_slug, model_slug, display
+                            );
+                        },
+                    );
+
+                    let key = format!("mod:{}:{}", me.plugin_slug, me.model_slug);
+                    entries.push((key, entry));
+                }
+            }
+        }
+
+        Spatial::default()
+            .pos([
+                self.smoothed_position.x,
+                self.smoothed_position.y,
+                self.smoothed_position.z,
+            ])
+            .build()
+            .stable_children(entries)
     }
 }
 
