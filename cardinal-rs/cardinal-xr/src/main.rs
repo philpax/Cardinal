@@ -2,6 +2,7 @@ mod cable;
 mod constants;
 mod dmatex;
 mod hand_menu;
+mod interaction;
 mod math;
 mod module_panel;
 mod workspace;
