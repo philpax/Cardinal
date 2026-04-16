@@ -65,7 +65,7 @@ fn main() {
     eprintln!("cardinal-xr: catalog has {} entries", catalog.len());
 
     // Build hand menu state from catalog.
-    let _hand_menu = HandMenuState::from_catalog(&catalog);
+    let mut hand_menu = HandMenuState::from_catalog(&catalog);
 
     // --- Stardust XR connection and event loop ---
     let rt = tokio::runtime::Runtime::new().expect("cardinal-xr: failed to create tokio runtime");
@@ -91,11 +91,23 @@ fn main() {
                         stardust_xr_fusion::root::RootEvent::Ping { response } => {
                             response.send_ok(());
                         }
-                        stardust_xr_fusion::root::RootEvent::Frame { info: _ } => {
-                            workspace.frame_update();
+                        stardust_xr_fusion::root::RootEvent::Frame { info } => {
+                            workspace.frame_update(info.delta);
+
+                            // Drain spawn requests from hand menu and spawn modules.
+                            for (plugin_slug, model_slug) in hand_menu.spawn_requests.drain(..) {
+                                // TODO: use right hand's pointing ray for spawn position
+                                let spawn_pos = glam::Vec3::new(0.0, 0.0, -crate::constants::MODULE_SPAWN_DISTANCE_M);
+                                workspace.spawn_module(
+                                    plugin_slug,
+                                    model_slug,
+                                    spawn_pos,
+                                    glam::Quat::IDENTITY,
+                                );
+                            }
 
                             // TODO: detect palm-up gesture and call
-                            //       _hand_menu.update_palm_visibility(palm_up_amount)
+                            //       hand_menu.update_palm_visibility(palm_up_amount)
                             // TODO: update projectors with latest render textures
                         }
                         stardust_xr_fusion::root::RootEvent::SaveState { response } => {

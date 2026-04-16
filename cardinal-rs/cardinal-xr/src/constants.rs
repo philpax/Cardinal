@@ -46,6 +46,10 @@ pub const MENU_COLUMN_GAP_M: f32 = 0.01;
 // ── Module Spawning ────────────────────────────────────────────────
 pub const MODULE_SPAWN_DISTANCE_M: f32 = 0.5;
 
+// ── Grab Momentum ─────────────────────────────────────────────────
+pub const GRAB_MOMENTUM_DRAG: f32 = 8.0;
+pub const GRAB_MOMENTUM_THRESHOLD: f32 = 0.01;
+
 // ── Delete Button ──────────────────────────────────────────────────
 pub const DELETE_BUTTON_SIZE_M: f32 = 0.015;
 pub const DELETE_BUTTON_OFFSET_M: f32 = 0.01;

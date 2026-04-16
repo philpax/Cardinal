@@ -1,19 +1,20 @@
 use cardinal_core::cardinal_thread::RenderResult;
 use cardinal_core::{ModuleId, ParamInfo, PortInfo};
 use glam::Vec3;
-use stardust_xr_fusion::drawable::Model;
+use stardust_xr_fusion::drawable::{Lines, Model};
 use stardust_xr_fusion::fields::{Field, Shape};
 use stardust_xr_fusion::input::{InputDataType, InputHandler};
 use stardust_xr_fusion::spatial::{Spatial, SpatialAspect, SpatialRefAspect, Transform};
 use stardust_xr_fusion::values::ResourceID;
+use stardust_xr_fusion::values::color::rgba_linear;
 use stardust_xr_molecules::button::{Button, ButtonSettings, ButtonVisualSettings};
 use stardust_xr_molecules::input_action::{InputQueue, InputQueueable, SingleAction};
+use stardust_xr_molecules::lines::{LineExt, circle};
 use stardust_xr_molecules::UIElement;
-use stardust_xr_fusion::values::color::rgba_linear;
 
 use crate::constants::{
-    DELETE_BUTTON_OFFSET_M, DELETE_BUTTON_SIZE_M, PANEL_DEPTH_M, PIXELS_PER_METER,
-    RESIZE_HANDLE_RADIUS_M,
+    DELETE_BUTTON_OFFSET_M, DELETE_BUTTON_SIZE_M, GRAB_MOMENTUM_DRAG, GRAB_MOMENTUM_THRESHOLD,
+    PANEL_DEPTH_M, PIXELS_PER_METER, RESIZE_HANDLE_RADIUS_M,
 };
 
 /// Path to the panel glTF asset, resolved at compile time relative to the crate root.
@@ -26,10 +27,31 @@ fn panel_resource() -> ResourceID {
 /// A small grabbable sphere at a corner of the panel, used for resizing.
 struct ResizeHandle {
     _field: Field,
+    _lines: Lines,
     input: InputQueue,
     grab_action: SingleAction,
     /// Which corner: index 0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right
     corner_index: usize,
+}
+
+/// Build sphere-outline lines for a resize handle (3 orthogonal circles).
+fn resize_handle_lines() -> Vec<stardust_xr_fusion::drawable::Line> {
+    use glam::Mat4;
+    use std::f32::consts::FRAC_PI_2;
+
+    let color = rgba_linear!(0.7, 0.7, 0.7, 0.3);
+    let thickness = 0.001;
+    let r = RESIZE_HANDLE_RADIUS_M;
+
+    let y_circle = circle(12, 0.0, r).color(color).thickness(thickness);
+    let x_circle = y_circle
+        .clone()
+        .transform(Mat4::from_rotation_x(FRAC_PI_2));
+    let z_circle = y_circle
+        .clone()
+        .transform(Mat4::from_rotation_z(FRAC_PI_2));
+
+    vec![y_circle, x_circle, z_circle]
 }
 
 impl ResizeHandle {
@@ -45,8 +67,16 @@ impl ResizeHandle {
         )?;
         let input = InputHandler::create(parent, Transform::none(), &field)?.queue()?;
 
+        let handle_lines = resize_handle_lines();
+        let lines = Lines::create(
+            parent,
+            Transform::from_translation(mint::Vector3::from(offset)),
+            &handle_lines,
+        )?;
+
         Ok(ResizeHandle {
             _field: field,
+            _lines: lines,
             input,
             grab_action: SingleAction::default(),
             corner_index,
@@ -98,6 +128,10 @@ struct BodyGrab {
     grab_action: SingleAction,
     /// The offset between the grab point and the panel position when grab started.
     grab_offset: Vec3,
+    /// Previous grab position for velocity tracking.
+    prev_grab_pos: Vec3,
+    /// Current velocity (meters/sec) for momentum after release.
+    velocity: Vec3,
 }
 
 impl BodyGrab {
@@ -123,6 +157,8 @@ impl BodyGrab {
             input,
             grab_action: SingleAction::default(),
             grab_offset: Vec3::ZERO,
+            prev_grab_pos: Vec3::ZERO,
+            velocity: Vec3::ZERO,
         })
     }
 
@@ -296,19 +332,28 @@ impl ModulePanel {
     }
 
     /// Called each frame to process grab, resize, and delete interactions.
-    pub fn frame_update(&mut self) {
+    pub fn frame_update(&mut self, dt: f32) {
         // --- Body grab (moving) ---
         self.body_grab.handle_events();
 
         if self.body_grab.actor_started() {
             if let Some(gp) = self.body_grab.grab_point() {
                 self.body_grab.grab_offset = self.position - gp;
+                self.body_grab.prev_grab_pos = gp;
+                self.body_grab.velocity = Vec3::ZERO;
             }
         }
 
         if self.body_grab.actor_acting() {
             if let Some(gp) = self.body_grab.grab_point() {
                 let new_pos = gp + self.body_grab.grab_offset;
+
+                // Track velocity for momentum on release
+                if dt > 0.0 {
+                    self.body_grab.velocity = (gp - self.body_grab.prev_grab_pos) / dt;
+                }
+                self.body_grab.prev_grab_pos = gp;
+
                 self.position = new_pos;
                 let _ = self.spatial.set_local_transform(
                     Transform::from_translation_rotation(
@@ -316,6 +361,27 @@ impl ModulePanel {
                         mint::Quaternion::from(self.rotation),
                     ),
                 );
+            }
+        }
+
+        if self.body_grab.actor_stopped() {
+            // Velocity was already tracked during grab; momentum will be applied below.
+        }
+
+        // --- Momentum (post-release drift) ---
+        if !self.body_grab.actor_acting() && self.body_grab.velocity.length() > GRAB_MOMENTUM_THRESHOLD {
+            // Exponential decay
+            self.body_grab.velocity *= (-GRAB_MOMENTUM_DRAG * dt).exp();
+            self.position += self.body_grab.velocity * dt;
+            let _ = self.spatial.set_local_transform(
+                Transform::from_translation_rotation(
+                    mint::Vector3::from(self.position),
+                    mint::Quaternion::from(self.rotation),
+                ),
+            );
+            // Stop when below threshold
+            if self.body_grab.velocity.length() < GRAB_MOMENTUM_THRESHOLD {
+                self.body_grab.velocity = Vec3::ZERO;
             }
         }
 
@@ -327,24 +393,59 @@ impl ModulePanel {
         // Check if any resize handle is being dragged
         if let Some(active_idx) = self.resize_handles.iter().position(|h| h.is_grabbing()) {
             if let Some(grab_pos) = self.resize_handles[active_idx].grab_point() {
-                // Simple resize: compute new size based on distance from center.
-                // The grab position is in the parent (spatial) coordinate space.
-                // We use the absolute x/y to determine new half-extents.
-                let new_hw = grab_pos.x.abs().max(0.01);
-                let new_hh = grab_pos.y.abs().max(0.01);
+                let corner_idx = self.resize_handles[active_idx].corner_index;
+                let old_w = self.width_m();
+                let old_h = self.height_m();
+                let aspect = old_w / old_h;
 
-                let new_width_m = new_hw * 2.0;
-                let new_height_m = new_hh * 2.0;
+                // Determine the anchor corner (opposite to the dragged corner).
+                // Corner layout: 0=TL, 1=TR, 2=BL, 3=BR
+                let anchor_signs: (f32, f32) = match corner_idx {
+                    0 => (1.0, -1.0),  // TL dragged -> anchor BR
+                    1 => (-1.0, -1.0), // TR dragged -> anchor BL
+                    2 => (1.0, 1.0),   // BL dragged -> anchor TR
+                    3 => (-1.0, 1.0),  // BR dragged -> anchor TL
+                    _ => unreachable!(),
+                };
+                let anchor_world = self.position
+                    + Vec3::new(anchor_signs.0 * old_w / 2.0, anchor_signs.1 * old_h / 2.0, 0.0);
 
-                // Update size_px (approximate, for bookkeeping)
-                self.size_px = (new_width_m * PIXELS_PER_METER, new_height_m * PIXELS_PER_METER);
+                // The grab position is in parent-space. Compute desired size from
+                // anchor to grab point, then lock aspect ratio using dominant axis.
+                let delta = grab_pos - anchor_world;
+                let desired_w = delta.x.abs();
+                let desired_h = delta.y.abs();
+
+                // Pick dominant axis and derive the other from aspect ratio.
+                let (new_w, new_h) = if desired_w / aspect > desired_h {
+                    // Width is dominant
+                    (desired_w.max(0.02), (desired_w / aspect).max(0.02))
+                } else {
+                    // Height is dominant
+                    ((desired_h * aspect).max(0.02), desired_h.max(0.02))
+                };
+
+                // Reposition so the anchor corner stays fixed.
+                let new_center = anchor_world
+                    + Vec3::new(-anchor_signs.0 * new_w / 2.0, -anchor_signs.1 * new_h / 2.0, 0.0);
+                self.position = new_center;
+
+                self.size_px = (new_w * PIXELS_PER_METER, new_h * PIXELS_PER_METER);
 
                 // Rescale model
                 let _ = self.model.set_local_transform(Transform::from_scale(mint::Vector3 {
-                    x: new_width_m,
-                    y: new_height_m,
+                    x: new_w,
+                    y: new_h,
                     z: 1.0,
                 }));
+
+                // Update panel position
+                let _ = self.spatial.set_local_transform(
+                    Transform::from_translation_rotation(
+                        mint::Vector3::from(self.position),
+                        mint::Quaternion::from(self.rotation),
+                    ),
+                );
             }
         }
 

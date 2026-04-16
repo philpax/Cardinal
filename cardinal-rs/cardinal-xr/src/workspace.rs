@@ -148,12 +148,12 @@ impl Workspace {
         }
     }
 
-    pub fn frame_update(&mut self) {
+    pub fn frame_update(&mut self, dt: f32) {
         self.poll_render_results();
 
         // Update all module panels (grab, resize, delete interactions).
         for panel in self.modules.values_mut() {
-            panel.frame_update();
+            panel.frame_update(dt);
         }
 
         // Collect modules flagged for deletion.

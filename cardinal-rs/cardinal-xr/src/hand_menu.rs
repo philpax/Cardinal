@@ -43,6 +43,8 @@ pub struct HandMenuState {
     pub visible: bool,
     pub smoothed_position: Vec3,
     pub scroll_offsets: FxHashMap<MenuLevel, usize>,
+    /// Pending module spawn requests: (plugin_slug, model_slug).
+    pub spawn_requests: Vec<(String, String)>,
 }
 
 impl HandMenuState {
@@ -105,6 +107,7 @@ impl HandMenuState {
             visible: false,
             smoothed_position: Vec3::ZERO,
             scroll_offsets: FxHashMap::default(),
+            spawn_requests: Vec::new(),
         }
     }
 
@@ -312,16 +315,12 @@ impl Reify for HandMenuState {
                         - ((abs_idx - module_scroll) as f32) * MENU_ITEM_SPACING_M;
                     let plugin_slug = me.plugin_slug.clone();
                     let model_slug = me.model_slug.clone();
-                    let display = me.display_name.clone();
 
                     let entry = menu_entry(
                         &me.display_name,
                         [MENU_COLUMN_STRIDE_M, y_pos, 0.0],
-                        move |_state: &mut HandMenuState| {
-                            eprintln!(
-                                "hand_menu: spawn module {}/{} ({})",
-                                plugin_slug, model_slug, display
-                            );
+                        move |state: &mut HandMenuState| {
+                            state.spawn_requests.push((plugin_slug.clone(), model_slug.clone()));
                         },
                     );
 
