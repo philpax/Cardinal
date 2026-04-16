@@ -1,4 +1,3 @@
-use std::os::fd::OwnedFd;
 use std::sync::{mpsc, Arc};
 use cardinal_core::cardinal_thread::{Command, RenderResult};
 use cardinal_core::{ModuleId, CableId, CatalogEntry};
@@ -21,12 +20,14 @@ pub struct Workspace {
     next_cable_color_idx: usize,
     /// wgpu device for creating exportable textures.
     device: Arc<wgpu::Device>,
+    /// wgpu queue for submitting GPU commands (used by CPU readback).
+    queue: Arc<wgpu::Queue>,
     /// Stardust client handle for dmatex import.
     client_handle: Arc<ClientHandle>,
     /// Next dmatex ID to assign.
     next_dmatex_id: u64,
-    /// DRM render node fd (shared across all modules).
-    drm_fd: Option<OwnedFd>,
+    /// DRM render node (shared across all modules).
+    render_node: Option<timeline_syncobj::render_node::DrmRenderNode>,
 }
 
 impl Workspace {
@@ -36,12 +37,13 @@ impl Workspace {
         cmd_tx: mpsc::Sender<Command>,
         render_rx: mpsc::Receiver<RenderResult>,
         device: Arc<wgpu::Device>,
+        queue: Arc<wgpu::Queue>,
         client_handle: Arc<ClientHandle>,
     ) -> Self {
         let root_spatial = Spatial::create(parent, Transform::identity())
             .expect("cardinal-xr: failed to create workspace root spatial");
-        let drm_fd = dmatex::open_drm_render_node();
-        if drm_fd.is_none() {
+        let render_node = dmatex::open_drm_render_node();
+        if render_node.is_none() {
             eprintln!("cardinal-xr: WARNING: no DRM render node found, DMA-BUF textures unavailable");
         }
         Self {
@@ -55,8 +57,9 @@ impl Workspace {
             next_cable_color_idx: 0,
             device,
             client_handle,
+            queue,
             next_dmatex_id: 1,
-            drm_fd,
+            render_node,
         }
     }
 
@@ -98,20 +101,16 @@ impl Workspace {
         let mut panel = ModulePanel::new(&self.root_spatial, id, size, inputs, outputs, params, position, rotation, scale);
 
         // Set up DMA-BUF texture streaming if available.
-        if let Some(drm_fd) = &self.drm_fd {
+        if let Some(render_node) = &self.render_node {
             let w = size.0 as u32;
             let h = size.1 as u32;
             if let Some(textures) = dmatex::create_exportable_texture_pair(&self.device, w, h) {
                 // Create a timeline syncobj.
-                if let Some(syncobj_pair) = dmatex::create_timeline_syncobj(drm_fd) {
+                if let Some(syncobj_state) = dmatex::create_timeline_syncobj(render_node) {
                     // Assign dmatex IDs.
                     let dmatex_id_0 = self.next_dmatex_id;
                     let dmatex_id_1 = self.next_dmatex_id + 1;
                     self.next_dmatex_id += 2;
-
-                    let drm_fd_dup = drm_fd.try_clone()
-                        .expect("failed to dup drm fd");
-                    let syncobj_handle = syncobj_pair.handle;
 
                     // Import both textures into Stardust.
                     use stardust_xr_fusion::drawable::{DmatexSize, DmatexPlane};
@@ -121,7 +120,7 @@ impl Workspace {
                     for (i, tex) in textures.iter().enumerate() {
                         let dmabuf_fd_dup = tex.dmabuf.fd.try_clone()
                             .expect("failed to dup dmabuf fd");
-                        let syncobj_dup_i = syncobj_pair.fd.try_clone()
+                        let syncobj_dup_i = syncobj_state.fd.try_clone()
                             .expect("failed to dup syncobj fd");
 
                         let result = stardust_xr_fusion::drawable::import_dmatex(
@@ -153,8 +152,7 @@ impl Workspace {
                         dmatex_ids: [dmatex_id_0, dmatex_id_1],
                         current_buffer: 0,
                         acquire_point: 0,
-                        drm_fd: drm_fd_dup,
-                        syncobj_handle,
+                        syncobj: syncobj_state.syncobj,
                     });
 
                     // TODO: Send the exportable textures to the cardinal thread
@@ -251,19 +249,16 @@ impl Workspace {
     pub fn frame_update(&mut self, dt: f32) {
         self.poll_render_results();
 
-        // Request re-renders for modules with dmatex textures.
-        // We send the current write-buffer texture to the cardinal thread.
+        // Request re-renders for all modules.
+        // Using standard textures (CPU readback path) for now.
+        // TODO: switch to dmatex textures once timeline syncobj issues are resolved.
         for panel in self.modules.values() {
-            if let Some(state) = &panel.dmatex_state {
-                // Clone the texture handle (wgpu::Texture is Clone — it's an Arc internally)
-                let write_tex = state.textures[state.current_buffer].texture.clone();
-                let _ = self.cmd_tx.send(Command::RenderModule {
-                    module_id: panel.id,
-                    width: panel.size_px.0 as i32,
-                    height: panel.size_px.1 as i32,
-                    texture: Some(write_tex),
-                });
-            }
+            let _ = self.cmd_tx.send(Command::RenderModule {
+                module_id: panel.id,
+                width: panel.size_px.0 as i32,
+                height: panel.size_px.1 as i32,
+                texture: None,
+            });
         }
 
         // Update all module panels (grab, resize, delete interactions).

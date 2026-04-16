@@ -83,6 +83,7 @@ async fn main() {
         cmd_tx,
         render_rx,
         device.clone(),
+        queue.clone(),
         client_handle,
     );
 

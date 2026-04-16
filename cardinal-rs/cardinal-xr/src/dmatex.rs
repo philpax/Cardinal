@@ -280,125 +280,114 @@ pub fn create_exportable_texture_pair(
     }
 }
 
-/// Open the DRM render node for syncobj creation.
-pub fn open_drm_render_node() -> Option<OwnedFd> {
+/// Open a DRM render node wrapped for the timeline_syncobj crate.
+pub fn open_drm_render_node() -> Option<timeline_syncobj::render_node::DrmRenderNode> {
     for i in 128..144 {
-        let path = format!("/dev/dri/renderD{i}");
-        if let Ok(fd) = std::fs::File::open(&path) {
-            return Some(fd.into());
+        if let Ok(node) = timeline_syncobj::render_node::DrmRenderNode::new(i) {
+            return Some(node);
         }
     }
     eprintln!("cardinal-xr/dmatex: no DRM render node found");
     None
 }
 
-/// A DRM syncobj with both the raw kernel handle (for signaling)
-/// and an exported fd (for sharing with Stardust).
-pub struct SyncobjPair {
-    /// The raw DRM syncobj handle (kernel-side).
-    pub handle: u32,
+/// A DRM timeline syncobj for GPU synchronization.
+pub struct SyncobjState {
+    /// The timeline syncobj (for signaling and waiting).
+    pub syncobj: timeline_syncobj::timeline_syncobj::TimelineSyncObj,
     /// An exported fd that can be sent to other processes.
     pub fd: OwnedFd,
 }
 
-/// Create a DRM timeline syncobj and return both its handle and fd.
-pub fn create_timeline_syncobj(drm_fd: &OwnedFd) -> Option<SyncobjPair> {
-    // DRM_IOCTL_SYNCOBJ_CREATE = 0xC00806BF
-    // DRM_SYNCOBJ_CREATE_TYPE_TIMELINE isn't needed — a regular syncobj
-    // becomes a timeline when used with timeline operations.
-    #[repr(C)]
-    struct DrmSyncobjCreate {
-        handle: u32,
-        flags: u32,
-    }
-
-    let mut create = DrmSyncobjCreate {
-        handle: 0,
-        flags: 0,
+/// Create a DRM timeline syncobj and return it with an exported fd.
+pub fn create_timeline_syncobj(render_node: &timeline_syncobj::render_node::DrmRenderNode) -> Option<SyncobjState> {
+    let syncobj = match timeline_syncobj::timeline_syncobj::TimelineSyncObj::create(render_node) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("cardinal-xr/dmatex: failed to create timeline syncobj: {e}");
+            return None;
+        }
     };
 
-    // DRM_IOCTL_SYNCOBJ_CREATE = DRM_IOWR(0xBF, drm_syncobj_create)
-    let ret = unsafe {
-        libc::ioctl(
-            drm_fd.as_raw_fd(),
-            0xC008_64BF_u64 as libc::c_ulong,
-            &mut create as *mut DrmSyncobjCreate,
-        )
-    };
-    if ret != 0 {
-        eprintln!("cardinal-xr/dmatex: DRM_IOCTL_SYNCOBJ_CREATE failed: {}", std::io::Error::last_os_error());
-        return None;
+    // Signal point 0 to initialize the timeline before exporting.
+    // Some drivers need at least one timeline operation before TIMELINE export works.
+    if let Err(e) = unsafe { syncobj.signal(0) } {
+        eprintln!("cardinal-xr/dmatex: failed to signal initial point 0: {e}");
     }
 
-    // DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD to export the handle as an fd.
+    // Try exporting with TIMELINE flag first (preferred).
+    // Fall back to plain export if TIMELINE flag not supported.
+    let fd = match syncobj.export() {
+        Ok(fd) => fd,
+        Err(_) => {
+            eprintln!("cardinal-xr/dmatex: TIMELINE export failed, trying plain export");
+            match export_syncobj_fd(render_node, &syncobj) {
+                Some(fd) => fd,
+                None => return None,
+            }
+        }
+    };
+
+    Some(SyncobjState { syncobj, fd })
+}
+
+/// Export a syncobj as a plain fd (without TIMELINE flag).
+/// Some drivers don't support the TIMELINE flag on HANDLE_TO_FD.
+fn export_syncobj_fd(
+    render_node: &timeline_syncobj::render_node::DrmRenderNode,
+    syncobj: &timeline_syncobj::timeline_syncobj::TimelineSyncObj,
+) -> Option<OwnedFd> {
+    use std::os::fd::AsFd;
+
+    // Get the raw handle from the syncobj — it's a newtype(u32)
+    let handle = unsafe { syncobj.get_raw_handle() };
+    // Transmute the newtype to u32 (they have the same repr)
+    let handle_u32: u32 = unsafe { std::mem::transmute(handle) };
+
     #[repr(C)]
     struct DrmSyncobjHandleToFd {
         handle: u32,
         flags: u32,
         fd: i32,
         pad: u32,
+        point: u64,
     }
 
-    let mut handle_to_fd = DrmSyncobjHandleToFd {
-        handle: create.handle,
-        flags: 0, // No EXPORT_SYNC_FILE flag — we want the syncobj fd itself
+    let mut req = DrmSyncobjHandleToFd {
+        handle: handle_u32,
+        flags: 0, // No TIMELINE flag — plain syncobj fd
         fd: -1,
         pad: 0,
+        point: 0,
     };
 
-    // DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD = DRM_IOWR(0xC1, drm_syncobj_handle)
+    let render_fd = render_node.as_fd();
+
+    // DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD
     let ret = unsafe {
         libc::ioctl(
-            drm_fd.as_raw_fd(),
-            0xC010_64C1_u64 as libc::c_ulong,
-            &mut handle_to_fd as *mut DrmSyncobjHandleToFd,
+            render_fd.as_raw_fd(),
+            0xC018_64C1_u64 as libc::c_ulong,
+            &mut req as *mut DrmSyncobjHandleToFd,
         )
     };
     if ret != 0 {
-        eprintln!("cardinal-xr/dmatex: DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD failed: {}", std::io::Error::last_os_error());
+        eprintln!("cardinal-xr/dmatex: syncobj HANDLE_TO_FD (no TIMELINE) failed: {}", std::io::Error::last_os_error());
         return None;
     }
 
-    Some(SyncobjPair {
-        handle: create.handle,
-        fd: unsafe { OwnedFd::from_raw_fd(handle_to_fd.fd) },
-    })
+    Some(unsafe { OwnedFd::from_raw_fd(req.fd) })
 }
 
-/// Signal a timeline syncobj at a specific point using the raw DRM handle.
-///
-/// This is called after Cardinal finishes rendering to tell Stardust
-/// the texture is ready for reading.
-pub fn signal_timeline(drm_fd: &OwnedFd, syncobj_handle: u32, point: u64) -> bool {
-    #[repr(C)]
-    struct DrmSyncobjTimelineSignal {
-        handles: u64, // pointer to array of handles
-        points: u64,  // pointer to array of points
-        count_handles: u32,
-        pad: u32,
+/// Signal a timeline syncobj at a specific point.
+pub fn signal_timeline(syncobj: &timeline_syncobj::timeline_syncobj::TimelineSyncObj, point: u64) -> bool {
+    match unsafe { syncobj.signal(point) } {
+        Ok(()) => true,
+        Err(e) => {
+            eprintln!("cardinal-xr/dmatex: failed to signal timeline at point {point}: {e}");
+            false
+        }
     }
-
-    let mut signal = DrmSyncobjTimelineSignal {
-        handles: &syncobj_handle as *const u32 as u64,
-        points: &point as *const u64 as u64,
-        count_handles: 1,
-        pad: 0,
-    };
-
-    // DRM_IOCTL_SYNCOBJ_TIMELINE_SIGNAL = DRM_IOWR(0xCD, drm_syncobj_timeline_array)
-    let ret = unsafe {
-        libc::ioctl(
-            drm_fd.as_raw_fd(),
-            0xC018_64CD_u64 as libc::c_ulong,
-            &mut signal as *mut DrmSyncobjTimelineSignal,
-        )
-    };
-    if ret != 0 {
-        eprintln!("cardinal-xr/dmatex: DRM_IOCTL_SYNCOBJ_TIMELINE_SIGNAL failed: {}", std::io::Error::last_os_error());
-        return false;
-    }
-
-    true
 }
 
 /// The DRM format fourcc code for our textures (ABGR8888 = Rgba8Unorm).

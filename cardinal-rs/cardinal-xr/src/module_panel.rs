@@ -229,6 +229,8 @@ pub struct ModulePanel {
     delete_button: Button,
     /// Set to true when the delete button is pressed; workspace should check and remove.
     pub pending_delete: bool,
+    /// Whether we've applied a texture at least once.
+    texture_applied: bool,
 
     /// DMA-BUF texture state for streaming module renders to Stardust.
     /// None if DMA-BUF export is unavailable (fallback path).
@@ -245,10 +247,8 @@ pub struct DmatexState {
     pub current_buffer: usize,
     /// Current acquire timeline point.
     pub acquire_point: u64,
-    /// DRM render node fd (for syncobj signaling).
-    pub drm_fd: std::os::fd::OwnedFd,
-    /// The raw DRM syncobj handle (for signaling via ioctl).
-    pub syncobj_handle: u32,
+    /// The timeline syncobj for GPU synchronization.
+    pub syncobj: timeline_syncobj::timeline_syncobj::TimelineSyncObj,
 }
 
 impl ModulePanel {
@@ -368,48 +368,51 @@ impl ModulePanel {
             resize_handles,
             delete_button,
             pending_delete: false,
+            texture_applied: false,
             dmatex_state: None,
         }
     }
 
     /// Called when a new render texture arrives from the cardinal thread.
-    /// Applies the dmatex to the model's material so the rendered module
-    /// face appears on the panel.
-    pub fn on_render_result(&mut self, _result: RenderResult) {
-        let Some(state) = &mut self.dmatex_state else {
-            eprintln!("cardinal-xr: on_render_result for {:?} but no dmatex state", self.id);
+    /// Writes the rendered pixels to a PNG and applies as a file-based texture.
+    /// (DMA-BUF path is available but Stardust's timeline syncobj has issues;
+    /// this fallback uses CPU readback + file texture.)
+    pub fn on_render_result(&mut self, result: RenderResult) {
+        // Only apply texture once for now (file-based path is slow).
+        // TODO: switch to dmatex for real-time streaming.
+        if self.texture_applied {
+            return;
+        }
+
+        let w = result.width;
+        let h = result.height;
+
+        let Some(pixels) = result.pixels else {
             return;
         };
 
-        if state.acquire_point == 0 {
-            eprintln!("cardinal-xr: first render result for {:?}, applying dmatex", self.id);
-        }
-
-        // Advance to next buffer and bump timeline point.
-        state.current_buffer = 1 - state.current_buffer;
-        state.acquire_point += 1;
-
-        let dmatex_id = state.dmatex_ids[state.current_buffer];
-        let acquire_point = state.acquire_point;
-        let release_point = acquire_point + 1;
-
-        // Signal the timeline syncobj to tell Stardust we're done writing.
-        let signaled = dmatex::signal_timeline(&state.drm_fd, state.syncobj_handle, acquire_point);
-        if !signaled {
-            eprintln!("cardinal-xr: failed to signal timeline for {:?} at point {acquire_point}", self.id);
-        }
-
-        // Apply the dmatex to the model's "Panel" part.
-        if let Ok(part) = self.model.part("Panel") {
-            use stardust_xr_fusion::drawable::{MaterialParameter, DmatexSubmitInfo};
-            let _ = part.set_material_parameter(
-                "color",
-                MaterialParameter::Dmatex(DmatexSubmitInfo {
-                    dmatex_id,
-                    acquire_point,
-                    release_point,
-                }),
-            );
+        let path = format!("/tmp/cardinal-xr-module-{}.png", self.id.0);
+        if let Some(img) = image::RgbaImage::from_raw(w, h, pixels) {
+            match img.save(&path) {
+                Ok(()) => {
+                    eprintln!("cardinal-xr: saved module texture to {path} ({w}x{h})");
+                    if let Ok(part) = self.model.part("Panel") {
+                        use stardust_xr_fusion::drawable::MaterialParameter;
+                        use stardust_xr_fusion::values::ResourceID;
+                        if let Ok(resource) = ResourceID::new_direct(&path) {
+                            let _ = part.set_material_parameter(
+                                "diffuse",
+                                MaterialParameter::Texture(resource),
+                            );
+                            self.texture_applied = true;
+                            eprintln!("cardinal-xr: applied texture to panel for {:?}", self.id);
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("cardinal-xr: failed to save PNG: {e}");
+                }
+            }
         }
     }
 

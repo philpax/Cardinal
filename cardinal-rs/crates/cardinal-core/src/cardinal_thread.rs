@@ -65,11 +65,11 @@ pub struct ModuleInfo {
 
 pub struct RenderResult {
     pub module_id: ModuleId,
-    #[allow(dead_code)]
     pub width: u32,
-    #[allow(dead_code)]
     pub height: u32,
     pub texture: wgpu::Texture,
+    /// If set, contains CPU-readback RGBA8 pixels (for file-based texture fallback).
+    pub pixels: Option<Vec<u8>>,
 }
 
 pub fn spawn_cardinal_thread(
@@ -163,6 +163,7 @@ pub fn spawn_cardinal_thread(
                         if nanovg_ctx.is_null() { continue; }
                         let w = width as u32;
                         let h = height as u32;
+                        let is_standard_texture = pre_allocated_texture.is_none();
 
                         let texture = pre_allocated_texture.unwrap_or_else(|| {
                             let device = gpu_device.as_ref().unwrap();
@@ -173,7 +174,7 @@ pub fn spawn_cardinal_thread(
                                 sample_count: 1,
                                 dimension: wgpu::TextureDimension::D2,
                                 format: wgpu::TextureFormat::Rgba8Unorm,
-                                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
                                 view_formats: &[],
                             })
                         });
@@ -185,11 +186,20 @@ pub fn spawn_cardinal_thread(
                         unsafe { crate::ffi::nvgEndFrame(nanovg_ctx) };
 
                         if ok {
+                            // CPU readback for file-based texture fallback.
+                            let pixels = if is_standard_texture {
+                                let device = gpu_device.as_ref().unwrap();
+                                let queue = _gpu_queue.as_ref().unwrap();
+                                Some(cpu_readback_rgba8(device, queue, &texture, w, h))
+                            } else {
+                                None
+                            };
                             let _ = render_tx.send(RenderResult {
                                 module_id,
                                 width: w,
                                 height: h,
                                 texture,
+                                pixels,
                             });
                         }
                     }
@@ -221,4 +231,59 @@ pub fn spawn_cardinal_thread(
         .expect("failed to spawn cardinal thread");
 
     (cmd_tx, render_rx)
+}
+
+/// Read back pixels from an Rgba8Unorm texture on the GPU.
+fn cpu_readback_rgba8(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    texture: &wgpu::Texture,
+    width: u32,
+    height: u32,
+) -> Vec<u8> {
+    let bpp = 4u32;
+    let unpadded = width * bpp;
+    let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+    let padded = (unpadded + align - 1) / align * align;
+
+    let staging = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("readback"),
+        size: (padded * height) as u64,
+        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+
+    let mut enc = device.create_command_encoder(&Default::default());
+    enc.copy_texture_to_buffer(
+        wgpu::TexelCopyTextureInfo {
+            texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyBufferInfo {
+            buffer: &staging,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(padded),
+                rows_per_image: None,
+            },
+        },
+        wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+    );
+    queue.submit(std::iter::once(enc.finish()));
+
+    let slice = staging.slice(..);
+    let (tx, rx) = std::sync::mpsc::channel();
+    slice.map_async(wgpu::MapMode::Read, move |r| { let _ = tx.send(r); });
+    device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+    rx.recv().unwrap().unwrap();
+
+    let mapped = slice.get_mapped_range();
+    let mut out = Vec::with_capacity((unpadded * height) as usize);
+    for row in 0..height as usize {
+        let s = row * padded as usize;
+        out.extend_from_slice(&mapped[s..s + unpadded as usize]);
+    }
+    out
 }

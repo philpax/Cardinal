@@ -14,7 +14,9 @@ wgpu-hal = { version = "29", features = ["vulkan"] }
 wgpu-types = "29"
 ash = "0.38"
 libc = "0.2"
+timeline_syncobj = "0.1.0"
 pollster = "0.4"
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [dependencies.stardust-xr-wire]
 version = "0.51.0"
