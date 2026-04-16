@@ -257,6 +257,9 @@ pub struct DmatexState {
     pub acquire_point: u64,
     /// The timeline syncobj for GPU synchronization.
     pub syncobj: timeline_syncobj::timeline_syncobj::TimelineSyncObj,
+    /// Whether the timeline syncobj was exported with TIMELINE flag.
+    /// False on NVIDIA where TIMELINE export fails; dmatex path is disabled.
+    pub timeline_export_works: bool,
 }
 
 impl ModulePanel {
@@ -393,27 +396,55 @@ impl ModulePanel {
     }
 
     /// Called when a new render texture arrives from the cardinal thread.
-    /// Writes the rendered pixels to a PNG and applies as a file-based texture.
-    /// (DMA-BUF path is available but Stardust's timeline syncobj has issues;
-    /// this fallback uses CPU readback + file texture.)
-    pub fn on_render_result(&mut self, result: RenderResult) {
-        // Only apply texture once for now (file-based path is slow).
-        // TODO: switch to dmatex for real-time streaming.
-        if self.texture_applied {
-            return;
+    pub fn on_render_result(&mut self, result: RenderResult, device: &wgpu::Device) {
+        if let Some(state) = &mut self.dmatex_state {
+            if state.timeline_export_works {
+                // DMA-BUF path: GPU rendered to our dmatex texture.
+                // Ensure GPU work is complete before signaling.
+                device.poll(wgpu::PollType::wait_indefinitely()).ok();
+
+                // Advance timeline
+                state.current_buffer = 1 - state.current_buffer;
+                state.acquire_point += 1;
+
+                let dmatex_id = state.dmatex_ids[state.current_buffer];
+                let acquire_point = state.acquire_point;
+                let release_point = acquire_point + 1;
+
+                // CPU-signal the timeline to tell Stardust we're done writing
+                if dmatex::signal_timeline(&state.syncobj, acquire_point) {
+                    if let Ok(part) = self.model.part("Panel") {
+                        use stardust_xr_fusion::drawable::{MaterialParameter, DmatexSubmitInfo};
+                        let _ = part.set_material_parameter(
+                            "diffuse",
+                            MaterialParameter::Dmatex(DmatexSubmitInfo {
+                                dmatex_id,
+                                acquire_point,
+                                release_point,
+                            }),
+                        );
+                    }
+                    return;
+                }
+            }
         }
 
-        let w = result.width;
-        let h = result.height;
+        // Fallback: CPU readback + PNG file.
+        // Used when DMA-BUF timeline syncobj export fails (e.g. NVIDIA drivers
+        // don't support HANDLE_TO_FD with TIMELINE flag, and the Stardust server's
+        // export_sync_file_point uses EXPORT_SYNC_FILE | TIMELINE which also fails).
+        {
+            // Fallback: PNG file-based path
+            if self.texture_applied {
+                return;
+            }
+            let w = result.width;
+            let h = result.height;
+            let Some(pixels) = result.pixels else { return };
 
-        let Some(pixels) = result.pixels else {
-            return;
-        };
-
-        let path = format!("/tmp/cardinal-xr-module-{}.png", self.id.0);
-        if let Some(img) = image::RgbaImage::from_raw(w, h, pixels) {
-            match img.save(&path) {
-                Ok(()) => {
+            let path = format!("/tmp/cardinal-xr-module-{}.png", self.id.0);
+            if let Some(img) = image::RgbaImage::from_raw(w, h, pixels) {
+                if let Ok(()) = img.save(&path) {
                     eprintln!("cardinal-xr: saved module texture to {path} ({w}x{h})");
                     if let Ok(part) = self.model.part("Panel") {
                         use stardust_xr_fusion::drawable::MaterialParameter;
@@ -427,9 +458,6 @@ impl ModulePanel {
                             eprintln!("cardinal-xr: applied texture to panel for {:?}", self.id);
                         }
                     }
-                }
-                Err(e) => {
-                    eprintln!("cardinal-xr: failed to save PNG: {e}");
                 }
             }
         }

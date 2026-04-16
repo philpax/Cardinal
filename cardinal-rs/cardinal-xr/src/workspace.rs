@@ -153,6 +153,7 @@ impl Workspace {
                         current_buffer: 0,
                         acquire_point: 0,
                         syncobj: syncobj_state.syncobj,
+                        timeline_export_works: syncobj_state.timeline_exported,
                     });
 
                     // TODO: Send the exportable textures to the cardinal thread
@@ -237,7 +238,7 @@ impl Workspace {
                 Ok(result) => {
                     let module_id = result.module_id;
                     if let Some(panel) = self.modules.get_mut(&module_id) {
-                        panel.on_render_result(result);
+                        panel.on_render_result(result, &self.device);
                     }
                 }
                 Err(mpsc::TryRecvError::Empty) => break,
@@ -250,14 +251,16 @@ impl Workspace {
         self.poll_render_results();
 
         // Request re-renders for all modules.
-        // Using standard textures (CPU readback path) for now.
-        // TODO: switch to dmatex textures once timeline syncobj issues are resolved.
+        // Use dmatex textures when timeline export works, standard textures otherwise.
         for panel in self.modules.values() {
+            let texture = panel.dmatex_state.as_ref()
+                .filter(|s| s.timeline_export_works)
+                .map(|state| state.textures[state.current_buffer].texture.clone());
             let _ = self.cmd_tx.send(Command::RenderModule {
                 module_id: panel.id,
                 width: panel.size_px.0 as i32,
                 height: panel.size_px.1 as i32,
-                texture: None,
+                texture,
             });
         }
 

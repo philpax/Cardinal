@@ -325,6 +325,9 @@ pub struct SyncobjState {
     pub syncobj: timeline_syncobj::timeline_syncobj::TimelineSyncObj,
     /// An exported fd that can be sent to other processes.
     pub fd: OwnedFd,
+    /// Whether the TIMELINE export flag was used (true = dmatex path works).
+    /// False on NVIDIA where TIMELINE export fails with EINVAL.
+    pub timeline_exported: bool,
 }
 
 /// Create a DRM timeline syncobj and return it with an exported fd.
@@ -343,20 +346,21 @@ pub fn create_timeline_syncobj(render_node: &timeline_syncobj::render_node::DrmR
         eprintln!("cardinal-xr/dmatex: failed to signal initial point 0: {e}");
     }
 
-    // Try exporting with TIMELINE flag first (preferred).
-    // Fall back to plain export if TIMELINE flag not supported.
-    let fd = match syncobj.export() {
-        Ok(fd) => fd,
-        Err(_) => {
-            eprintln!("cardinal-xr/dmatex: TIMELINE export failed, trying plain export");
+    // Export with TIMELINE flag. Falls back to plain export if unsupported
+    // (e.g. older kernels missing required DRM features).
+    let (fd, timeline_exported) = match syncobj.export() {
+        Ok(fd) => (fd, true),
+        Err(e) => {
+            eprintln!("cardinal-xr/dmatex: TIMELINE export failed ({e}), trying plain export");
+            eprintln!("cardinal-xr/dmatex: dmatex path will be disabled — server needs TIMELINE syncobj");
             match export_syncobj_fd(render_node, &syncobj) {
-                Some(fd) => fd,
+                Some(fd) => (fd, false),
                 None => return None,
             }
         }
     };
 
-    Some(SyncobjState { syncobj, fd })
+    Some(SyncobjState { syncobj, fd, timeline_exported })
 }
 
 /// Export a syncobj as a plain fd (without TIMELINE flag).
