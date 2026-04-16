@@ -75,9 +75,9 @@ impl InteractionBox {
         scale: f32,
     ) -> Option<Self> {
         let box_size = INTERACTION_BOX_MIN_SIZE_M * scale;
-        let protrusion = INTERACTION_BOX_PROTRUSION_M * scale;
+        // Push interaction boxes well in front of the panel body grab field
+        let protrusion = (INTERACTION_BOX_PROTRUSION_M + PANEL_DEPTH_M) * scale;
 
-        // Position the field at the widget's location, offset forward
         let pos = Vec3::new(panel_offset.x, panel_offset.y, protrusion);
 
         let field = Field::create(
@@ -107,9 +107,13 @@ impl InteractionBox {
             .color(color)
             .thickness(0.001 * scale);
 
+        // circle() generates in XZ plane; rotate 90° around X to bring onto XY (panel face)
         let visual = Lines::create(
             parent,
-            Transform::from_translation(mint::Vector3::from(pos)),
+            Transform::from_translation_rotation(
+                mint::Vector3::from(pos),
+                mint::Quaternion::from(glam::Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+            ),
             &[visual_line],
         ).ok()?;
 
@@ -133,17 +137,34 @@ impl InteractionBox {
             return InteractionEvent::None;
         }
 
+        // Debug: log first input to see what data we get
+        static LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if !LOGGED.load(std::sync::atomic::Ordering::Relaxed) {
+            for (data, _) in self.input.input() {
+                LOGGED.store(true, std::sync::atomic::Ordering::Relaxed);
+                let input_type = match &data.input {
+                    InputDataType::Hand(_) => "Hand",
+                    InputDataType::Pointer(_) => "Pointer",
+                    InputDataType::Tip(_) => "Tip",
+                };
+                let select = data.datamap.with_data(|dm| dm.idx("select").as_f32());
+                let grab = data.datamap.with_data(|dm| dm.idx("grab").as_f32());
+                eprintln!(
+                    "cardinal-xr: interaction input: type={input_type}, dist={:.4}, select={select:.2}, grab={grab:.2}",
+                    data.distance,
+                );
+            }
+        }
+
         let max_dist = INTERACTION_BOX_MIN_SIZE_M + 0.02;
         self.action.update(
             true,
             &self.input,
-            |input| match &input.input {
-                InputDataType::Pointer(_) => false,
-                _ => input.distance < max_dist,
-            },
+            |input| input.distance < max_dist,
             |input| {
                 input.datamap.with_data(|datamap| match &input.input {
                     InputDataType::Hand(_) => datamap.idx("pinch_strength").as_f32() > 0.90,
+                    InputDataType::Pointer(_) => datamap.idx("select").as_f32() > 0.90,
                     _ => datamap.idx("grab").as_f32() > 0.90,
                 })
             },

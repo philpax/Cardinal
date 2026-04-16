@@ -91,17 +91,15 @@ impl ResizeHandle {
         if !self.input.handle_events() {
             return;
         }
-        let max_dist = RESIZE_HANDLE_RADIUS_M + 0.02; // radius + padding
+        let max_dist = RESIZE_HANDLE_RADIUS_M + 0.02;
         self.grab_action.update(
             true,
             &self.input,
-            |input| match &input.input {
-                InputDataType::Pointer(_) => false,
-                _ => input.distance < max_dist,
-            },
+            |input| input.distance < max_dist,
             |input| {
                 input.datamap.with_data(|datamap| match &input.input {
                     InputDataType::Hand(_) => datamap.idx("pinch_strength").as_f32() > 0.90,
+                    InputDataType::Pointer(_) => datamap.idx("select").as_f32() > 0.90,
                     _ => datamap.idx("grab").as_f32() > 0.90,
                 })
             },
@@ -112,7 +110,7 @@ impl ResizeHandle {
     fn grab_point(&self) -> Option<Vec3> {
         let actor = self.grab_action.actor()?;
         match &actor.input {
-            InputDataType::Pointer(_) => None,
+            InputDataType::Pointer(p) => Some(p.origin.into()),
             InputDataType::Hand(h) => {
                 Some(Vec3::from(h.thumb.tip.position).lerp(Vec3::from(h.index.tip.position), 0.5))
             }
@@ -223,8 +221,7 @@ pub struct ModulePanel {
 
     /// Grabbable body for moving the panel in 3D space.
     body_grab: BodyGrab,
-    /// Resize handles at each corner.
-    resize_handles: [ResizeHandle; 4],
+    // TODO: resize handles removed until coordinate space issues are resolved
     /// Per-widget interaction boxes (ports + params).
     pub interaction_boxes: Vec<crate::interaction::InteractionBox>,
     /// Delete button at the top-right corner.
@@ -319,21 +316,6 @@ impl ModulePanel {
             .expect("cardinal-xr: failed to create body grab");
 
 
-        // --- Resize handles at four corners ---
-        let hw = width_m / 2.0;
-        let hh = height_m / 2.0;
-        let corner_offsets = [
-            Vec3::new(-hw, hh, 0.0),  // top-left
-            Vec3::new(hw, hh, 0.0),   // top-right
-            Vec3::new(-hw, -hh, 0.0), // bottom-left
-            Vec3::new(hw, -hh, 0.0),  // bottom-right
-        ];
-        let resize_handles = std::array::from_fn(|i| {
-            ResizeHandle::create(&spatial, corner_offsets[i], i)
-                .expect("cardinal-xr: failed to create resize handle")
-        });
-
-
         // --- Interaction boxes (per-widget) ---
         let interaction_boxes = crate::interaction::create_interaction_boxes(
             &spatial, &inputs, &outputs, &params,
@@ -377,7 +359,6 @@ impl ModulePanel {
             model,
             _outline,
             body_grab,
-            resize_handles,
             interaction_boxes,
             delete_button,
             pending_delete: false,
@@ -488,70 +469,6 @@ impl ModulePanel {
             // Stop when below threshold
             if self.body_grab.velocity.length() < GRAB_MOMENTUM_THRESHOLD {
                 self.body_grab.velocity = Vec3::ZERO;
-            }
-        }
-
-        // --- Resize handles ---
-        for handle in &mut self.resize_handles {
-            handle.handle_events();
-        }
-
-        // Check if any resize handle is being dragged
-        if let Some(active_idx) = self.resize_handles.iter().position(|h| h.is_grabbing()) {
-            if let Some(grab_pos) = self.resize_handles[active_idx].grab_point() {
-                let corner_idx = self.resize_handles[active_idx].corner_index;
-                let old_w = self.width_m();
-                let old_h = self.height_m();
-                let aspect = old_w / old_h;
-
-                // Determine the anchor corner (opposite to the dragged corner).
-                // Corner layout: 0=TL, 1=TR, 2=BL, 3=BR
-                let anchor_signs: (f32, f32) = match corner_idx {
-                    0 => (1.0, -1.0),  // TL dragged -> anchor BR
-                    1 => (-1.0, -1.0), // TR dragged -> anchor BL
-                    2 => (1.0, 1.0),   // BL dragged -> anchor TR
-                    3 => (-1.0, 1.0),  // BR dragged -> anchor TL
-                    _ => unreachable!(),
-                };
-                let anchor_world = self.position
-                    + Vec3::new(anchor_signs.0 * old_w / 2.0, anchor_signs.1 * old_h / 2.0, 0.0);
-
-                // The grab position is in parent-space. Compute desired size from
-                // anchor to grab point, then lock aspect ratio using dominant axis.
-                let delta = grab_pos - anchor_world;
-                let desired_w = delta.x.abs();
-                let desired_h = delta.y.abs();
-
-                // Pick dominant axis and derive the other from aspect ratio.
-                let (new_w, new_h) = if desired_w / aspect > desired_h {
-                    // Width is dominant
-                    (desired_w.max(0.02), (desired_w / aspect).max(0.02))
-                } else {
-                    // Height is dominant
-                    ((desired_h * aspect).max(0.02), desired_h.max(0.02))
-                };
-
-                // Reposition so the anchor corner stays fixed.
-                let new_center = anchor_world
-                    + Vec3::new(-anchor_signs.0 * new_w / 2.0, -anchor_signs.1 * new_h / 2.0, 0.0);
-                self.position = new_center;
-
-                self.size_px = (new_w * PIXELS_PER_METER, new_h * PIXELS_PER_METER);
-
-                // Rescale model
-                let _ = self.model.set_local_transform(Transform::from_scale(mint::Vector3 {
-                    x: new_w,
-                    y: new_h,
-                    z: 1.0,
-                }));
-
-                // Update panel position
-                let _ = self.spatial.set_local_transform(
-                    Transform::from_translation_rotation(
-                        mint::Vector3::from(self.position),
-                        mint::Quaternion::from(self.rotation),
-                    ),
-                );
             }
         }
 
