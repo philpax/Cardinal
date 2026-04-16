@@ -12,13 +12,16 @@ use std::sync::Arc;
 
 use stardust_xr_fusion::root::RootAspect as _;
 
+use crate::hand_menu::HandMenuState;
+use crate::workspace::Workspace;
+
 fn main() {
     eprintln!("cardinal-xr: starting");
 
     let sample_rate = cardinal_core::audio::cpal_sample_rate().unwrap_or(48000.0);
     eprintln!("Audio sample rate: {sample_rate} Hz");
 
-    let (cmd_tx, _render_rx) = cardinal_core::cardinal_thread::spawn_cardinal_thread(sample_rate);
+    let (cmd_tx, render_rx) = cardinal_core::cardinal_thread::spawn_cardinal_thread(sample_rate);
     let _audio_stream = cardinal_core::audio::start_audio_stream();
 
     // --- GPU initialisation (Vulkan) ---
@@ -61,6 +64,9 @@ fn main() {
     let catalog = catalog_rx.recv().expect("cardinal-xr: failed to receive catalog");
     eprintln!("cardinal-xr: catalog has {} entries", catalog.len());
 
+    // Build hand menu state from catalog.
+    let _hand_menu = HandMenuState::from_catalog(&catalog);
+
     // --- Stardust XR connection and event loop ---
     let rt = tokio::runtime::Runtime::new().expect("cardinal-xr: failed to create tokio runtime");
     rt.block_on(async {
@@ -70,6 +76,14 @@ fn main() {
 
         eprintln!("cardinal-xr: connected to Stardust XR server");
 
+        // Create workspace parented to the Stardust client root.
+        let mut workspace = Workspace::new(
+            client.get_root(),
+            catalog,
+            cmd_tx,
+            render_rx,
+        );
+
         client
             .sync_event_loop(|client, _flow| {
                 while let Some(root_event) = client.get_root().recv_root_event() {
@@ -78,7 +92,11 @@ fn main() {
                             response.send_ok(());
                         }
                         stardust_xr_fusion::root::RootEvent::Frame { info: _ } => {
-                            // TODO: per-frame rendering logic
+                            workspace.frame_update();
+
+                            // TODO: detect palm-up gesture and call
+                            //       _hand_menu.update_palm_visibility(palm_up_amount)
+                            // TODO: update projectors with latest render textures
                         }
                         stardust_xr_fusion::root::RootEvent::SaveState { response } => {
                             response.send_ok(stardust_xr_fusion::root::ClientState::default());
