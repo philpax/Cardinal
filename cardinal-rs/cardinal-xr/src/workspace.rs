@@ -150,6 +150,23 @@ impl Workspace {
 
     pub fn frame_update(&mut self) {
         self.poll_render_results();
+
+        // Update all module panels (grab, resize, delete interactions).
+        for panel in self.modules.values_mut() {
+            panel.frame_update();
+        }
+
+        // Collect modules flagged for deletion.
+        let to_delete: Vec<ModuleId> = self
+            .modules
+            .values()
+            .filter(|p| p.pending_delete)
+            .map(|p| p.id)
+            .collect();
+        for id in to_delete {
+            self.destroy_module(id);
+        }
+
         // Cable geometry updates come later
     }
 }
