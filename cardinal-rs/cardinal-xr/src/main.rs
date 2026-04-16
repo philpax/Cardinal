@@ -76,11 +76,14 @@ async fn main() {
     eprintln!("cardinal-xr: connected to Stardust XR server");
 
     // Create workspace parented to the Stardust client root.
+    let client_handle = client.handle();
     let mut workspace = Workspace::new(
         client.get_root(),
         catalog,
         cmd_tx,
         render_rx,
+        device.clone(),
+        client_handle,
     );
 
     let mut debug_spawned = false;

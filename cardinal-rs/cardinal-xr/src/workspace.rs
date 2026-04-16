@@ -1,9 +1,12 @@
-use std::sync::mpsc;
+use std::os::fd::OwnedFd;
+use std::sync::{mpsc, Arc};
 use cardinal_core::cardinal_thread::{Command, RenderResult};
 use cardinal_core::{ModuleId, CableId, CatalogEntry};
 use rustc_hash::FxHashMap;
+use stardust_xr_fusion::client::ClientHandle;
 use stardust_xr_fusion::spatial::{Spatial, SpatialRefAspect, Transform};
-use crate::module_panel::ModulePanel;
+use crate::dmatex;
+use crate::module_panel::{DmatexState, ModulePanel};
 use crate::cable::{Cable, CableDragState};
 
 pub struct Workspace {
@@ -16,6 +19,14 @@ pub struct Workspace {
     pub root_spatial: Spatial,
     render_rx: mpsc::Receiver<RenderResult>,
     next_cable_color_idx: usize,
+    /// wgpu device for creating exportable textures.
+    device: Arc<wgpu::Device>,
+    /// Stardust client handle for dmatex import.
+    client_handle: Arc<ClientHandle>,
+    /// Next dmatex ID to assign.
+    next_dmatex_id: u64,
+    /// DRM render node fd (shared across all modules).
+    drm_fd: Option<OwnedFd>,
 }
 
 impl Workspace {
@@ -24,9 +35,15 @@ impl Workspace {
         catalog: Vec<CatalogEntry>,
         cmd_tx: mpsc::Sender<Command>,
         render_rx: mpsc::Receiver<RenderResult>,
+        device: Arc<wgpu::Device>,
+        client_handle: Arc<ClientHandle>,
     ) -> Self {
         let root_spatial = Spatial::create(parent, Transform::identity())
             .expect("cardinal-xr: failed to create workspace root spatial");
+        let drm_fd = dmatex::open_drm_render_node();
+        if drm_fd.is_none() {
+            eprintln!("cardinal-xr: WARNING: no DRM render node found, DMA-BUF textures unavailable");
+        }
         Self {
             modules: FxHashMap::default(),
             cables: FxHashMap::default(),
@@ -36,6 +53,10 @@ impl Workspace {
             root_spatial,
             render_rx,
             next_cable_color_idx: 0,
+            device,
+            client_handle,
+            next_dmatex_id: 1,
+            drm_fd,
         }
     }
 
@@ -73,7 +94,80 @@ impl Workspace {
             .ok()?;
 
         eprintln!("cardinal-xr: creating panel scene graph for {id:?} ({} inputs, {} outputs, {} params)", inputs.len(), outputs.len(), params.len());
-        let panel = ModulePanel::new(&self.root_spatial, id, size, inputs, outputs, params, position, rotation, scale);
+        let mut panel = ModulePanel::new(&self.root_spatial, id, size, inputs, outputs, params, position, rotation, scale);
+
+        // Set up DMA-BUF texture streaming if available.
+        if let Some(drm_fd) = &self.drm_fd {
+            let w = size.0 as u32;
+            let h = size.1 as u32;
+            if let Some(textures) = dmatex::create_exportable_texture_pair(&self.device, w, h) {
+                // Create a timeline syncobj.
+                if let Some(syncobj_pair) = dmatex::create_timeline_syncobj(drm_fd) {
+                    // Assign dmatex IDs.
+                    let dmatex_id_0 = self.next_dmatex_id;
+                    let dmatex_id_1 = self.next_dmatex_id + 1;
+                    self.next_dmatex_id += 2;
+
+                    let drm_fd_dup = drm_fd.try_clone()
+                        .expect("failed to dup drm fd");
+                    let syncobj_handle = syncobj_pair.handle;
+
+                    // Import both textures into Stardust.
+                    use stardust_xr_fusion::drawable::{DmatexSize, DmatexPlane};
+                    use stardust_xr_wire::fd::ProtocolFd;
+
+                    let dmatex_ids = [dmatex_id_0, dmatex_id_1];
+                    for (i, tex) in textures.iter().enumerate() {
+                        let dmabuf_fd_dup = tex.dmabuf.fd.try_clone()
+                            .expect("failed to dup dmabuf fd");
+                        let syncobj_dup_i = syncobj_pair.fd.try_clone()
+                            .expect("failed to dup syncobj fd");
+
+                        let result = stardust_xr_fusion::drawable::import_dmatex(
+                            &self.client_handle,
+                            dmatex_ids[i],
+                            DmatexSize::Dim2D(mint::Vector2 { x: w, y: h }),
+                            dmatex::drm_format(),
+                            tex.dmabuf.drm_format_modifier,
+                            false, // not sRGB (Rgba8Unorm is linear)
+                            None,  // no array layers
+                            &[DmatexPlane {
+                                dmabuf_fd: ProtocolFd::from(dmabuf_fd_dup),
+                                offset: tex.dmabuf.offset,
+                                row_size: tex.dmabuf.stride,
+                                array_element_size: 0,
+                                depth_slice_size: 0,
+                            }],
+                            ProtocolFd::from(syncobj_dup_i),
+                        );
+
+                        match result {
+                            Ok(()) => eprintln!("cardinal-xr: imported dmatex {} for module {id:?}", dmatex_ids[i]),
+                            Err(e) => eprintln!("cardinal-xr: failed to import dmatex {}: {e}", dmatex_ids[i]),
+                        }
+                    }
+
+                    panel.dmatex_state = Some(DmatexState {
+                        dmatex_ids: [dmatex_id_0, dmatex_id_1],
+                        current_buffer: 0,
+                        acquire_point: 0,
+                        drm_fd: drm_fd_dup,
+                        syncobj_handle,
+                    });
+
+                    // TODO: Send the exportable textures to the cardinal thread
+                    // so it renders to them instead of creating new ones each frame.
+                    // For now, the on_render_result path handles texture streaming.
+
+                    eprintln!("cardinal-xr: DMA-BUF textures set up for module {id:?}");
+                } else {
+                    eprintln!("cardinal-xr: failed to create timeline syncobj for module {id:?}");
+                }
+            } else {
+                eprintln!("cardinal-xr: failed to create exportable textures for module {id:?}");
+            }
+        }
+
         eprintln!("cardinal-xr: panel scene graph created for {id:?}");
         self.modules.insert(id, panel);
 

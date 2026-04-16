@@ -10,7 +10,15 @@ mint = "0.5.9"
 tokio = { version = "1.45.0", features = ["macros", "time", "sync"] }
 rustc-hash = "2.0.0"
 wgpu = "29"
+wgpu-hal = { version = "29", features = ["vulkan"] }
+wgpu-types = "29"
+ash = "0.38"
+libc = "0.2"
 pollster = "0.4"
+
+[dependencies.stardust-xr-wire]
+version = "0.51.0"
+git = "https://github.com/StardustXR/core.git"
 
 [dependencies.stardust-xr-fusion]
 version = "0.51.0"

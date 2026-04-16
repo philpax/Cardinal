@@ -1,7 +1,7 @@
 use cardinal_core::cardinal_thread::RenderResult;
 use cardinal_core::{ModuleId, ParamInfo, PortInfo};
 use glam::Vec3;
-use stardust_xr_fusion::drawable::{Lines, Model};
+use stardust_xr_fusion::drawable::{Lines, Model, ModelPartAspect};
 use stardust_xr_fusion::fields::{Field, Shape};
 use stardust_xr_fusion::input::{InputDataType, InputHandler};
 use stardust_xr_fusion::spatial::{Spatial, SpatialAspect, SpatialRefAspect, Transform};
@@ -11,6 +11,8 @@ use stardust_xr_molecules::button::{Button, ButtonSettings, ButtonVisualSettings
 use stardust_xr_molecules::input_action::{InputQueue, InputQueueable, SingleAction};
 use stardust_xr_molecules::lines::{LineExt, circle};
 use stardust_xr_molecules::UIElement;
+
+use crate::dmatex;
 
 use crate::constants::{
     DELETE_BUTTON_OFFSET_M, DELETE_BUTTON_SIZE_M, GRAB_MOMENTUM_DRAG, GRAB_MOMENTUM_THRESHOLD,
@@ -227,6 +229,24 @@ pub struct ModulePanel {
     delete_button: Button,
     /// Set to true when the delete button is pressed; workspace should check and remove.
     pub pending_delete: bool,
+
+    /// DMA-BUF texture state for streaming module renders to Stardust.
+    /// None if DMA-BUF export is unavailable (fallback path).
+    pub dmatex_state: Option<DmatexState>,
+}
+
+/// Tracks the DMA-BUF texture streaming state for one module.
+pub struct DmatexState {
+    /// Stardust dmatex IDs for the two double-buffered textures.
+    pub dmatex_ids: [u64; 2],
+    /// Which buffer was last submitted (0 or 1).
+    pub current_buffer: usize,
+    /// Current acquire timeline point.
+    pub acquire_point: u64,
+    /// DRM render node fd (for syncobj signaling).
+    pub drm_fd: std::os::fd::OwnedFd,
+    /// The raw DRM syncobj handle (for signaling via ioctl).
+    pub syncobj_handle: u32,
 }
 
 impl ModulePanel {
@@ -346,11 +366,41 @@ impl ModulePanel {
             resize_handles,
             delete_button,
             pending_delete: false,
+            dmatex_state: None,
         }
     }
 
+    /// Called when a new render texture arrives from the cardinal thread.
+    /// Applies the dmatex to the model's material so the rendered module
+    /// face appears on the panel.
     pub fn on_render_result(&mut self, _result: RenderResult) {
-        // TODO: update dmatex texture
+        let Some(state) = &mut self.dmatex_state else {
+            return;
+        };
+
+        // Advance to next buffer and bump timeline point.
+        state.current_buffer = 1 - state.current_buffer;
+        state.acquire_point += 1;
+
+        let dmatex_id = state.dmatex_ids[state.current_buffer];
+        let acquire_point = state.acquire_point;
+        let release_point = acquire_point + 1;
+
+        // Signal the timeline syncobj to tell Stardust we're done writing.
+        dmatex::signal_timeline(&state.drm_fd, state.syncobj_handle, acquire_point);
+
+        // Apply the dmatex to the model's "Panel" part.
+        if let Ok(part) = self.model.part("Panel") {
+            use stardust_xr_fusion::drawable::{MaterialParameter, DmatexSubmitInfo};
+            let _ = part.set_material_parameter(
+                "color",
+                MaterialParameter::Dmatex(DmatexSubmitInfo {
+                    dmatex_id,
+                    acquire_point,
+                    release_point,
+                }),
+            );
+        }
     }
 
     pub fn width_m(&self) -> f32 {
