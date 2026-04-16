@@ -237,6 +237,8 @@ pub struct ModulePanel {
 
 /// Tracks the DMA-BUF texture streaming state for one module.
 pub struct DmatexState {
+    /// The two exportable textures for double-buffering.
+    pub textures: [dmatex::ExportableTexture; 2],
     /// Stardust dmatex IDs for the two double-buffered textures.
     pub dmatex_ids: [u64; 2],
     /// Which buffer was last submitted (0 or 1).
@@ -375,8 +377,13 @@ impl ModulePanel {
     /// face appears on the panel.
     pub fn on_render_result(&mut self, _result: RenderResult) {
         let Some(state) = &mut self.dmatex_state else {
+            eprintln!("cardinal-xr: on_render_result for {:?} but no dmatex state", self.id);
             return;
         };
+
+        if state.acquire_point == 0 {
+            eprintln!("cardinal-xr: first render result for {:?}, applying dmatex", self.id);
+        }
 
         // Advance to next buffer and bump timeline point.
         state.current_buffer = 1 - state.current_buffer;
@@ -387,7 +394,10 @@ impl ModulePanel {
         let release_point = acquire_point + 1;
 
         // Signal the timeline syncobj to tell Stardust we're done writing.
-        dmatex::signal_timeline(&state.drm_fd, state.syncobj_handle, acquire_point);
+        let signaled = dmatex::signal_timeline(&state.drm_fd, state.syncobj_handle, acquire_point);
+        if !signaled {
+            eprintln!("cardinal-xr: failed to signal timeline for {:?} at point {acquire_point}", self.id);
+        }
 
         // Apply the dmatex to the model's "Panel" part.
         if let Ok(part) = self.model.part("Panel") {

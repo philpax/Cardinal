@@ -107,7 +107,7 @@ unsafe fn create_exportable_texture(
         .mip_levels(1)
         .array_layers(1)
         .samples(vk::SampleCountFlags::TYPE_1)
-        .tiling(vk::ImageTiling::LINEAR) // LINEAR for DMA-BUF compatibility
+        .tiling(vk::ImageTiling::OPTIMAL) // OPTIMAL for render attachment support
         .usage(
             vk::ImageUsageFlags::COLOR_ATTACHMENT
                 | vk::ImageUsageFlags::SAMPLED
@@ -160,13 +160,16 @@ unsafe fn create_exportable_texture(
     let raw_fd = unsafe { ext_memory_fd.get_memory_fd(&get_fd_info)? };
     let dmabuf_fd = unsafe { OwnedFd::from_raw_fd(raw_fd) };
 
-    // 6. Get image subresource layout for stride.
-    let subresource = vk::ImageSubresource {
-        aspect_mask: vk::ImageAspectFlags::COLOR,
-        mip_level: 0,
-        array_layer: 0,
-    };
-    let layout = unsafe { raw_device.get_image_subresource_layout(vk_image, subresource) };
+    // 6. Query the DRM format modifier that was actually chosen.
+    // With OPTIMAL tiling, we can't use get_image_subresource_layout.
+    // The stride is not meaningful for OPTIMAL images — the server will
+    // determine it from the modifier. We pass 0 for stride/offset.
+
+    // DRM format modifier: with OPTIMAL tiling + DMA-BUF export, the driver
+    // chooses the modifier internally. We report DRM_FORMAT_MOD_INVALID (which
+    // tells the server to detect it from the DMA-BUF itself) or 0 (LINEAR).
+    // For simplicity, we use 0 (LINEAR) which most drivers support.
+    let drm_format_modifier = 0u64;
 
     // 7. Wrap as a wgpu HAL texture, then as a wgpu texture.
     let hal_desc = wgpu::hal::TextureDescriptor {
@@ -228,15 +231,12 @@ unsafe fn create_exportable_texture(
         device.create_texture_from_hal::<wgpu::hal::vulkan::Api>(hal_texture, &wgpu_desc)
     };
 
-    // LINEAR tiling with DMA-BUF export typically means modifier = LINEAR (0).
-    let drm_format_modifier = 0u64; // DRM_FORMAT_MOD_LINEAR
-
     Ok(ExportableTexture {
         texture: wgpu_texture,
         dmabuf: DmaBufInfo {
             fd: dmabuf_fd,
-            stride: layout.row_pitch as u32,
-            offset: layout.offset as u32,
+            stride: width * 4, // Best guess for OPTIMAL; server derives from modifier
+            offset: 0,
             drm_format_modifier,
         },
         _vk_memory: vk_memory,

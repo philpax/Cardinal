@@ -39,6 +39,8 @@ pub enum Command {
         module_id: ModuleId,
         width: i32,
         height: i32,
+        /// If provided, render to this pre-allocated texture instead of creating a new one.
+        texture: Option<wgpu::Texture>,
     },
     GetCatalog(mpsc::Sender<Vec<cc::CatalogEntry>>),
     SetIncompleteCable {
@@ -156,21 +158,24 @@ pub fn spawn_cardinal_thread(
                         module_id,
                         width,
                         height,
+                        texture: pre_allocated_texture,
                     } => {
                         if nanovg_ctx.is_null() { continue; }
-                        let device = gpu_device.as_ref().unwrap();
                         let w = width as u32;
                         let h = height as u32;
 
-                        let texture = device.create_texture(&wgpu::TextureDescriptor {
-                            label: Some("nvg_render_target"),
-                            size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-                            mip_level_count: 1,
-                            sample_count: 1,
-                            dimension: wgpu::TextureDimension::D2,
-                            format: wgpu::TextureFormat::Rgba8Unorm,
-                            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-                            view_formats: &[],
+                        let texture = pre_allocated_texture.unwrap_or_else(|| {
+                            let device = gpu_device.as_ref().unwrap();
+                            device.create_texture(&wgpu::TextureDescriptor {
+                                label: Some("nvg_render_target"),
+                                size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                                mip_level_count: 1,
+                                sample_count: 1,
+                                dimension: wgpu::TextureDimension::D2,
+                                format: wgpu::TextureFormat::Rgba8Unorm,
+                                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                                view_formats: &[],
+                            })
                         });
                         let view = texture.create_view(&Default::default());
 

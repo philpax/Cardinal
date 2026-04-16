@@ -84,12 +84,13 @@ impl Workspace {
         let outputs = info.outputs;
         let params = info.params;
 
-        // Request initial render
+        // Request initial render (texture will be provided after dmatex setup below)
         self.cmd_tx
             .send(Command::RenderModule {
                 module_id: id,
                 width: size.0 as i32,
                 height: size.1 as i32,
+                texture: None,
             })
             .ok()?;
 
@@ -148,6 +149,7 @@ impl Workspace {
                     }
 
                     panel.dmatex_state = Some(DmatexState {
+                        textures,
                         dmatex_ids: [dmatex_id_0, dmatex_id_1],
                         current_buffer: 0,
                         acquire_point: 0,
@@ -248,6 +250,21 @@ impl Workspace {
 
     pub fn frame_update(&mut self, dt: f32) {
         self.poll_render_results();
+
+        // Request re-renders for modules with dmatex textures.
+        // We send the current write-buffer texture to the cardinal thread.
+        for panel in self.modules.values() {
+            if let Some(state) = &panel.dmatex_state {
+                // Clone the texture handle (wgpu::Texture is Clone — it's an Arc internally)
+                let write_tex = state.textures[state.current_buffer].texture.clone();
+                let _ = self.cmd_tx.send(Command::RenderModule {
+                    module_id: panel.id,
+                    width: panel.size_px.0 as i32,
+                    height: panel.size_px.1 as i32,
+                    texture: Some(write_tex),
+                });
+            }
+        }
 
         // Update all module panels (grab, resize, delete interactions).
         for panel in self.modules.values_mut() {
