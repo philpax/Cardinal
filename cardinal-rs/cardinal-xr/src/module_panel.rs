@@ -36,6 +36,10 @@ struct ResizeHandle {
     grab_action: SingleAction,
     /// Which corner: index 0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right
     corner_index: usize,
+    /// Distance from panel center to grab point when grab started (for scale computation)
+    initial_grab_distance: f32,
+    /// The panel's initial diagonal (half-width² + half-height²).sqrt() when grab started
+    initial_panel_diagonal: f32,
 }
 
 /// Build sphere-outline lines for a resize handle (3 orthogonal circles).
@@ -84,6 +88,8 @@ impl ResizeHandle {
             input,
             grab_action: SingleAction::default(),
             corner_index,
+            initial_grab_distance: 0.0,
+            initial_panel_diagonal: 0.0,
         })
     }
 
@@ -221,7 +227,10 @@ pub struct ModulePanel {
 
     /// Grabbable body for moving the panel in 3D space.
     body_grab: BodyGrab,
-    // TODO: resize handles removed until coordinate space issues are resolved
+    /// Resize handles at each corner.
+    resize_handles: [ResizeHandle; 4],
+    /// The scale factor applied to this panel (for resize tracking).
+    pub scale: f32,
     /// Per-widget interaction boxes (ports + params).
     pub interaction_boxes: Vec<crate::interaction::InteractionBox>,
     /// Delete button at the top-right corner.
@@ -316,6 +325,20 @@ impl ModulePanel {
             .expect("cardinal-xr: failed to create body grab");
 
 
+        // --- Resize handles at four corners ---
+        let hw = width_m / 2.0;
+        let hh = height_m / 2.0;
+        let corner_offsets = [
+            Vec3::new(-hw, hh, 0.0),  // top-left
+            Vec3::new(hw, hh, 0.0),   // top-right
+            Vec3::new(-hw, -hh, 0.0), // bottom-left
+            Vec3::new(hw, -hh, 0.0),  // bottom-right
+        ];
+        let resize_handles = std::array::from_fn(|i| {
+            ResizeHandle::create(&spatial, corner_offsets[i], i)
+                .expect("cardinal-xr: failed to create resize handle")
+        });
+
         // --- Interaction boxes (per-widget) ---
         let interaction_boxes = crate::interaction::create_interaction_boxes(
             &spatial, &inputs, &outputs, &params,
@@ -359,6 +382,8 @@ impl ModulePanel {
             model,
             _outline,
             body_grab,
+            resize_handles,
+            scale,
             interaction_boxes,
             delete_button,
             pending_delete: false,
@@ -469,6 +494,39 @@ impl ModulePanel {
             // Stop when below threshold
             if self.body_grab.velocity.length() < GRAB_MOMENTUM_THRESHOLD {
                 self.body_grab.velocity = Vec3::ZERO;
+            }
+        }
+
+        // --- Resize handles ---
+        for handle in &mut self.resize_handles {
+            handle.handle_events();
+        }
+
+        // Simple resize: when a corner handle is grabbed, track the distance
+        // from the grab point to the panel center (origin in local space).
+        // Use the ratio of current distance to initial distance as a scale multiplier.
+        for handle in &mut self.resize_handles {
+            if handle.grab_action.actor_started() {
+                if let Some(gp) = handle.grab_point() {
+                    handle.initial_grab_distance = gp.length().max(0.01);
+                    handle.initial_panel_diagonal = self.scale;
+                }
+            }
+            if handle.grab_action.actor_acting() {
+                if let Some(gp) = handle.grab_point() {
+                    let current_dist = gp.length().max(0.01);
+                    let ratio = current_dist / handle.initial_grab_distance;
+                    let new_scale = (handle.initial_panel_diagonal * ratio).clamp(0.3, 20.0);
+
+                    self.scale = new_scale;
+                    let w = self.size_px.0 / PIXELS_PER_METER * self.scale;
+                    let h = self.size_px.1 / PIXELS_PER_METER * self.scale;
+                    let _ = self.model.set_local_transform(Transform::from_scale(mint::Vector3 {
+                        x: w,
+                        y: h,
+                        z: PANEL_DEPTH_M,
+                    }));
+                }
             }
         }
 
