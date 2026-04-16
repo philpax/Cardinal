@@ -2,6 +2,7 @@ use std::sync::mpsc;
 use cardinal_core::cardinal_thread::{Command, RenderResult};
 use cardinal_core::{ModuleId, CableId, CatalogEntry};
 use rustc_hash::FxHashMap;
+use stardust_xr_fusion::spatial::{Spatial, SpatialRefAspect, Transform};
 use crate::module_panel::ModulePanel;
 use crate::cable::{Cable, CableDragState};
 
@@ -11,22 +12,28 @@ pub struct Workspace {
     pub catalog: Vec<CatalogEntry>,
     pub cmd_tx: mpsc::Sender<Command>,
     pub cable_drag: CableDragState,
+    /// Root spatial node for the entire workspace, parented to the Stardust client root.
+    pub root_spatial: Spatial,
     render_rx: mpsc::Receiver<RenderResult>,
     next_cable_color_idx: usize,
 }
 
 impl Workspace {
     pub fn new(
+        parent: &impl SpatialRefAspect,
         catalog: Vec<CatalogEntry>,
         cmd_tx: mpsc::Sender<Command>,
         render_rx: mpsc::Receiver<RenderResult>,
     ) -> Self {
+        let root_spatial = Spatial::create(parent, Transform::identity())
+            .expect("cardinal-xr: failed to create workspace root spatial");
         Self {
             modules: FxHashMap::default(),
             cables: FxHashMap::default(),
             catalog,
             cmd_tx,
             cable_drag: CableDragState::Idle,
+            root_spatial,
             render_rx,
             next_cable_color_idx: 0,
         }
@@ -63,7 +70,7 @@ impl Workspace {
             })
             .ok()?;
 
-        let panel = ModulePanel::new(id, size, inputs, outputs, position, rotation);
+        let panel = ModulePanel::new(&self.root_spatial, id, size, inputs, outputs, position, rotation);
         self.modules.insert(id, panel);
 
         eprintln!("cardinal-xr: spawned module {plugin}/{model} -> {id:?} at {position:?}");
