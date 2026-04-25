@@ -396,22 +396,50 @@ impl ModulePanel {
     }
 
     /// Called when a new render texture arrives from the cardinal thread.
-    pub fn on_render_result(&mut self, result: RenderResult, device: &wgpu::Device) {
+    pub fn on_render_result(
+        &mut self,
+        result: RenderResult,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) {
         if let Some(state) = &mut self.dmatex_state {
             if state.timeline_export_works {
-                // DMA-BUF path: GPU rendered to our dmatex texture.
-                // Ensure GPU work is complete before signaling.
+                // DMA-BUF path: Cardinal rendered to its OPTIMAL target.
+                // GPU-copy that into the LINEAR DMA-BUF texture, wait for the
+                // copy to complete, then signal the timeline.
+                let write_buffer = state.current_buffer;
+                let dst_texture = &state.textures[write_buffer].texture;
+
+                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("dmatex_copy_encoder"),
+                });
+                encoder.copy_texture_to_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &result.texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::TexelCopyTextureInfo {
+                        texture: dst_texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::Extent3d {
+                        width: result.width,
+                        height: result.height,
+                        depth_or_array_layers: 1,
+                    },
+                );
+                queue.submit(std::iter::once(encoder.finish()));
                 device.poll(wgpu::PollType::wait_indefinitely()).ok();
 
-                // Advance timeline
-                state.current_buffer = 1 - state.current_buffer;
                 state.acquire_point += 1;
-
-                let dmatex_id = state.dmatex_ids[state.current_buffer];
                 let acquire_point = state.acquire_point;
                 let release_point = acquire_point + 1;
+                let dmatex_id = state.dmatex_ids[write_buffer];
 
-                // CPU-signal the timeline to tell Stardust we're done writing
                 if dmatex::signal_timeline(&state.syncobj, acquire_point) {
                     if let Ok(part) = self.model.part("Panel") {
                         use stardust_xr_fusion::drawable::{MaterialParameter, DmatexSubmitInfo};
@@ -424,6 +452,14 @@ impl ModulePanel {
                             }),
                         );
                     }
+                    if !self.texture_applied {
+                        eprintln!(
+                            "cardinal-xr: module {:?} active path = DMA-BUF dmatex (zero-copy GPU)",
+                            self.id,
+                        );
+                        self.texture_applied = true;
+                    }
+                    state.current_buffer = 1 - state.current_buffer;
                     return;
                 }
             }
@@ -455,7 +491,10 @@ impl ModulePanel {
                                 MaterialParameter::Texture(resource),
                             );
                             self.texture_applied = true;
-                            eprintln!("cardinal-xr: applied texture to panel for {:?}", self.id);
+                            eprintln!(
+                                "cardinal-xr: module {:?} active path = PNG fallback (CPU readback)",
+                                self.id,
+                            );
                         }
                     }
                 }

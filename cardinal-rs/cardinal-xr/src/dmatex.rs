@@ -88,6 +88,22 @@ unsafe fn create_exportable_texture(
     let physical_device = hal_device_guard.raw_physical_device();
     let instance = hal_device_guard.shared_instance().raw_instance();
 
+    // The dmatex image is used purely as a copy destination + sampled texture
+    // (cardinal renders to its own OPTIMAL target, then we GPU-copy into here).
+    // Most GPUs don't support COLOR_ATTACHMENT on LINEAR-tiled R8G8B8A8_UNORM
+    // but do support TRANSFER_DST + SAMPLED_IMAGE, which is all we need.
+    let format_props = unsafe {
+        instance.get_physical_device_format_properties(physical_device, vk::Format::R8G8B8A8_UNORM)
+    };
+    let needed = vk::FormatFeatureFlags::TRANSFER_DST | vk::FormatFeatureFlags::SAMPLED_IMAGE;
+    if !format_props.linear_tiling_features.contains(needed) {
+        return Err(format!(
+            "GPU LINEAR R8G8B8A8_UNORM lacks TRANSFER_DST|SAMPLED_IMAGE (got {:?})",
+            format_props.linear_tiling_features,
+        )
+        .into());
+    }
+
     // Load the external memory fd extension.
     let ext_memory_fd =
         ash::khr::external_memory_fd::Device::new(instance, raw_device);
@@ -96,6 +112,11 @@ unsafe fn create_exportable_texture(
     let mut external_memory_info = vk::ExternalMemoryImageCreateInfo::default()
         .handle_types(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
 
+    // LINEAR tiling: row-major layout in memory, so we can declare
+    // DRM_FORMAT_MOD_LINEAR (0) to the server and pass the actual row pitch
+    // queried via vkGetImageSubresourceLayout. OPTIMAL tiling produces
+    // driver-chosen swizzling that the server cannot interpret without the
+    // VK_EXT_image_drm_format_modifier negotiation flow.
     let image_create_info = vk::ImageCreateInfo::default()
         .image_type(vk::ImageType::TYPE_2D)
         .format(vk::Format::R8G8B8A8_UNORM)
@@ -107,11 +128,10 @@ unsafe fn create_exportable_texture(
         .mip_levels(1)
         .array_layers(1)
         .samples(vk::SampleCountFlags::TYPE_1)
-        .tiling(vk::ImageTiling::OPTIMAL) // OPTIMAL for render attachment support
+        .tiling(vk::ImageTiling::LINEAR)
         .usage(
-            vk::ImageUsageFlags::COLOR_ATTACHMENT
-                | vk::ImageUsageFlags::SAMPLED
-                | vk::ImageUsageFlags::TRANSFER_SRC,
+            vk::ImageUsageFlags::TRANSFER_DST
+                | vk::ImageUsageFlags::SAMPLED,
         )
         .sharing_mode(vk::SharingMode::EXCLUSIVE)
         .initial_layout(vk::ImageLayout::UNDEFINED)
@@ -160,16 +180,22 @@ unsafe fn create_exportable_texture(
     let raw_fd = unsafe { ext_memory_fd.get_memory_fd(&get_fd_info)? };
     let dmabuf_fd = unsafe { OwnedFd::from_raw_fd(raw_fd) };
 
-    // 6. Query the DRM format modifier that was actually chosen.
-    // With OPTIMAL tiling, we can't use get_image_subresource_layout.
-    // The stride is not meaningful for OPTIMAL images — the server will
-    // determine it from the modifier. We pass 0 for stride/offset.
-
-    // DRM format modifier: with OPTIMAL tiling + DMA-BUF export, the driver
-    // chooses the modifier internally. We report DRM_FORMAT_MOD_INVALID (which
-    // tells the server to detect it from the DMA-BUF itself) or 0 (LINEAR).
-    // For simplicity, we use 0 (LINEAR) which most drivers support.
-    let drm_format_modifier = 0u64;
+    // 6. Query the actual subresource layout. With LINEAR tiling this gives
+    // us the real row pitch (which can exceed width*4 due to driver alignment)
+    // and offset for the dma-buf import.
+    let subresource = vk::ImageSubresource {
+        aspect_mask: vk::ImageAspectFlags::COLOR,
+        mip_level: 0,
+        array_layer: 0,
+    };
+    let layout = unsafe { raw_device.get_image_subresource_layout(vk_image, subresource) };
+    let stride = layout.row_pitch as u32;
+    let offset = layout.offset as u32;
+    let drm_format_modifier = 0u64; // DRM_FORMAT_MOD_LINEAR
+    eprintln!(
+        "cardinal-xr/dmatex: LINEAR layout — width={width} height={height} \
+         row_pitch={stride} offset={offset}"
+    );
 
     // 7. Wrap as a wgpu HAL texture, then as a wgpu texture.
     let hal_desc = wgpu::hal::TextureDescriptor {
@@ -183,9 +209,8 @@ unsafe fn create_exportable_texture(
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu_types::TextureUses::COLOR_TARGET
-            | wgpu_types::TextureUses::RESOURCE
-            | wgpu_types::TextureUses::COPY_SRC,
+        usage: wgpu_types::TextureUses::COPY_DST
+            | wgpu_types::TextureUses::RESOURCE,
         memory_flags: wgpu_hal::MemoryFlags::empty(),
         view_formats: vec![],
     };
@@ -221,9 +246,7 @@ unsafe fn create_exportable_texture(
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-            | wgpu::TextureUsages::TEXTURE_BINDING
-            | wgpu::TextureUsages::COPY_SRC,
+        usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
         view_formats: &[],
     };
 
@@ -235,8 +258,8 @@ unsafe fn create_exportable_texture(
         texture: wgpu_texture,
         dmabuf: DmaBufInfo {
             fd: dmabuf_fd,
-            stride: width * 4, // Best guess for OPTIMAL; server derives from modifier
-            offset: 0,
+            stride,
+            offset,
             drm_format_modifier,
         },
         _vk_memory: vk_memory,

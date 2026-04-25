@@ -87,13 +87,15 @@ impl Workspace {
         let outputs = info.outputs;
         let params = info.params;
 
-        // Request initial render (texture will be provided after dmatex setup below)
+        // Request initial render. dmatex isn't set up yet at this point, so if
+        // the GPU path ends up failing we'll need the pixels for the PNG fallback.
         self.cmd_tx
             .send(Command::RenderModule {
                 module_id: id,
                 width: size.0 as i32,
                 height: size.1 as i32,
                 texture: None,
+                want_pixels: true,
             })
             .ok()?;
 
@@ -238,7 +240,7 @@ impl Workspace {
                 Ok(result) => {
                     let module_id = result.module_id;
                     if let Some(panel) = self.modules.get_mut(&module_id) {
-                        panel.on_render_result(result, &self.device);
+                        panel.on_render_result(result, &self.device, &self.queue);
                     }
                 }
                 Err(mpsc::TryRecvError::Empty) => break,
@@ -250,17 +252,22 @@ impl Workspace {
     pub fn frame_update(&mut self, dt: f32) {
         self.poll_render_results();
 
-        // Request re-renders for all modules.
-        // Use dmatex textures when timeline export works, standard textures otherwise.
+        // Request re-renders. Cardinal always renders to its own OPTIMAL target;
+        // for the dmatex path we GPU-copy from that target into the LINEAR
+        // DMA-BUF texture in on_render_result (LINEAR + COLOR_ATTACHMENT is
+        // unsupported on most GPUs, but TRANSFER_DST works fine). Skip the CPU
+        // readback when dmatex is active — the pixels would be discarded.
         for panel in self.modules.values() {
-            let texture = panel.dmatex_state.as_ref()
-                .filter(|s| s.timeline_export_works)
-                .map(|state| state.textures[state.current_buffer].texture.clone());
+            let want_pixels = !panel
+                .dmatex_state
+                .as_ref()
+                .is_some_and(|s| s.timeline_export_works);
             let _ = self.cmd_tx.send(Command::RenderModule {
                 module_id: panel.id,
                 width: panel.size_px.0 as i32,
                 height: panel.size_px.1 as i32,
-                texture,
+                texture: None,
+                want_pixels,
             });
         }
 

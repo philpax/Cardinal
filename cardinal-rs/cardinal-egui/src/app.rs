@@ -177,6 +177,8 @@ impl App {
                 module_id: m.id,
                 width: m.size.x as i32,
                 height: m.size.y as i32,
+                texture: None,
+                want_pixels: true,
             });
         }
     }

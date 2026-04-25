@@ -41,6 +41,9 @@ pub enum Command {
         height: i32,
         /// If provided, render to this pre-allocated texture instead of creating a new one.
         texture: Option<wgpu::Texture>,
+        /// If true, CPU-readback the rendered pixels into `RenderResult::pixels`.
+        /// Only the PNG-fallback path needs this; the dmatex path leaves it false.
+        want_pixels: bool,
     },
     GetCatalog(mpsc::Sender<Vec<cc::CatalogEntry>>),
     SetIncompleteCable {
@@ -159,11 +162,11 @@ pub fn spawn_cardinal_thread(
                         width,
                         height,
                         texture: pre_allocated_texture,
+                        want_pixels,
                     } => {
                         if nanovg_ctx.is_null() { continue; }
                         let w = width as u32;
                         let h = height as u32;
-                        let is_standard_texture = pre_allocated_texture.is_none();
 
                         let texture = pre_allocated_texture.unwrap_or_else(|| {
                             let device = gpu_device.as_ref().unwrap();
@@ -186,8 +189,9 @@ pub fn spawn_cardinal_thread(
                         unsafe { crate::ffi::nvgEndFrame(nanovg_ctx) };
 
                         if ok {
-                            // CPU readback for file-based texture fallback.
-                            let pixels = if is_standard_texture {
+                            // CPU readback only when the caller explicitly asks
+                            // (PNG fallback path). The dmatex path uses GPU copy.
+                            let pixels = if want_pixels {
                                 let device = gpu_device.as_ref().unwrap();
                                 let queue = _gpu_queue.as_ref().unwrap();
                                 Some(cpu_readback_rgba8(device, queue, &texture, w, h))
