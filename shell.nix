@@ -30,11 +30,11 @@ pkgs.mkShell {
     libGL
 
     # X11 (for winit x11 backend)
-    xorg.libX11
-    xorg.libXcursor
-    xorg.libXrandr
-    xorg.libXi
-    xorg.libXinerama
+    libX11
+    libXcursor
+    libXrandr
+    libXi
+    libXinerama
 
     # Audio (cpal backend)
     alsa-lib
@@ -48,10 +48,10 @@ pkgs.mkShell {
     pkgs.vulkan-loader
     pkgs.wayland
     pkgs.libxkbcommon
-    pkgs.xorg.libX11
-    pkgs.xorg.libXcursor
-    pkgs.xorg.libXrandr
-    pkgs.xorg.libXi
+    pkgs.libX11
+    pkgs.libXcursor
+    pkgs.libXrandr
+    pkgs.libXi
     pkgs.alsa-lib
   ];
 }
