@@ -60,6 +60,12 @@ fn main() {
         add_dirs(&mut build, &plugin_dir.join(dep_dir), 0);
     }
 
+    println!("cargo:rerun-if-changed={}", plugin_dir.join("src").display());
+    for dep_dir in ["dep", "deps", "lib"] {
+        let d = plugin_dir.join(dep_dir);
+        if d.exists() { println!("cargo:rerun-if-changed={}", d.display()); }
+    }
+
     // Symbol renames to avoid cross-plugin collisions
     build.define("pluginInstance", "pluginInstance__Mog");
 
@@ -96,13 +102,16 @@ fn main() {
                     }
                     let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
                     if !filter_out.contains(&rel) {
+                        println!("cargo:rerun-if-changed={}", path.display());
                         build.file(&path);
                     }
                 }
             }
         }
     }
+    println!("cargo:rerun-if-changed={}", plugins_dir.join("Mog/src/Network.cpp").display());
     build.file(plugins_dir.join("Mog/src/Network.cpp"));
+    println!("cargo:rerun-if-changed={}", plugins_dir.join("Mog/src/Nexus.cpp").display());
     build.file(plugins_dir.join("Mog/src/Nexus.cpp"));
 
     // Init wrapper (renames init() only for the plugin registration file)

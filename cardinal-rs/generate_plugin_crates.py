@@ -25,7 +25,7 @@ from collections import defaultdict
 CARDINAL_ROOT = Path(__file__).parent.parent
 PLUGINS_DIR = CARDINAL_ROOT / "plugins"
 MAKEFILE = PLUGINS_DIR / "Makefile"
-CRATES_DIR = CARDINAL_ROOT / "cardinal-rs" / "crates"
+CRATES_DIR = CARDINAL_ROOT / "cardinal-rs" / "crates" / "plugins"
 
 # Plugins that need external deps we can't provide
 SKIP_PLUGINS = {
@@ -298,6 +298,7 @@ cc = "1"
                     }
                     let rel = path.strip_prefix(plugins_dir).unwrap_or(&path).to_str().unwrap_or("").to_string();
                     if !filter_out.contains(&rel) {
+                        println!("cargo:rerun-if-changed={}", path.display());
                         build.file(&path);
                     }
                 }
@@ -309,6 +310,7 @@ cc = "1"
         source_code_parts.append(f'    collect_sources(&plugins_dir.join("{sd}"), &_filter_out, &plugins_dir, &mut build, 0);')
 
     for ef in explicit_files:
+        source_code_parts.append(f'    println!("cargo:rerun-if-changed={{}}", plugins_dir.join("{ef}").display());')
         source_code_parts.append(f'    build.file(plugins_dir.join("{ef}"));')
 
     # Find the init file — the .cpp that defines `void init(Plugin`
@@ -463,6 +465,7 @@ extern "C" void cardinal_register_{safe_name}() {{
 
 fn main() {{
     let cardinal_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent().unwrap()  // plugins/
         .parent().unwrap()  // crates/
         .parent().unwrap()  // cardinal-rs/
         .parent().unwrap()  // Cardinal/
@@ -518,6 +521,12 @@ fn main() {{
     add_dirs(&mut build, &plugin_dir.join("src"), 0);
     for dep_dir in ["dep", "deps", "lib"] {{
         add_dirs(&mut build, &plugin_dir.join(dep_dir), 0);
+    }}
+
+    println!("cargo:rerun-if-changed={{}}", plugin_dir.join("src").display());
+    for dep_dir in ["dep", "deps", "lib"] {{
+        let d = plugin_dir.join(dep_dir);
+        if d.exists() {{ println!("cargo:rerun-if-changed={{}}", d.display()); }}
     }}
 
     // Symbol renames to avoid cross-plugin collisions
